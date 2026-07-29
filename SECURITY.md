@@ -59,11 +59,15 @@ Initial audit 2026-07-29: 8 vulnerable packages (1 low / 4 moderate / 3 high).
 These are unresolved known risks, not false positives. Remediation owner:
 Claude Code, via semver-compatible updates in follow-up Notion task
 `3ac65cd1-7da6-81d0-b564-f10b18318bf3` (re-check when that task completes).
+Updated 2026-07-29 (execution-check re-audit): added GHSA-w62v-xxxg-mg59
+(hono, moderate). It was not present in the initial npm audit output
+recorded above; it was first detected by the execution-check re-audit.
+Advisories newly detected by a later audit are appended here the same way.
 
 | Package | Severity | Vulnerable range | Advisory IDs |
 |---|---|---|---|
 | ws | high | 7.0.0 - 7.5.10 | GHSA-96hv-2xvq-fx4p |
-| hono | high | <=4.12.26 | GHSA-26pp-8wgv-hjvm, GHSA-r5rp-j6wh-rvv4, GHSA-xf4j-xp2r-rqqx, GHSA-wmmm-f939-6g9c, GHSA-xpcf-pg52-r92g, GHSA-qp7p-654g-cw7p, GHSA-hm8q-7f3q-5f36, GHSA-p77w-8qqv-26rm, GHSA-9vqf-7f2p-gf9v, GHSA-69xw-7hcm-h432, GHSA-xrhx-7g5j-rcj5, GHSA-3hrh-pfw6-9m5x, GHSA-f577-qrjj-4474, GHSA-2gcr-mfcq-wcc3, GHSA-458j-xx4x-4375, GHSA-rv63-4mwf-qqc2, GHSA-wgpf-jwqj-8h8p, GHSA-88fw-hqm2-52qc, GHSA-wwfh-h76j-fc44, GHSA-j6c9-x7qj-28xf, GHSA-xgm2-5f3f-mvvc, GHSA-hvrm-45r6-mjfj |
+| hono | high | <=4.12.26 | GHSA-26pp-8wgv-hjvm, GHSA-r5rp-j6wh-rvv4, GHSA-xf4j-xp2r-rqqx, GHSA-wmmm-f939-6g9c, GHSA-xpcf-pg52-r92g, GHSA-qp7p-654g-cw7p, GHSA-hm8q-7f3q-5f36, GHSA-p77w-8qqv-26rm, GHSA-9vqf-7f2p-gf9v, GHSA-69xw-7hcm-h432, GHSA-xrhx-7g5j-rcj5, GHSA-3hrh-pfw6-9m5x, GHSA-f577-qrjj-4474, GHSA-2gcr-mfcq-wcc3, GHSA-458j-xx4x-4375, GHSA-rv63-4mwf-qqc2, GHSA-wgpf-jwqj-8h8p, GHSA-88fw-hqm2-52qc, GHSA-wwfh-h76j-fc44, GHSA-j6c9-x7qj-28xf, GHSA-xgm2-5f3f-mvvc, GHSA-hvrm-45r6-mjfj, GHSA-w62v-xxxg-mg59 |
 | fast-uri | high | <=3.1.3 | GHSA-q3j6-qgpj-74h6, GHSA-v39h-62p7-jpjc, GHSA-v2hh-gcrm-f6hx, GHSA-4c8g-83qw-93j6 |
 | @hono/node-server | moderate | <=2.0.4 | GHSA-92pp-h63x-v22m, GHSA-frvp-7c67-39w9 |
 | ip-address | moderate | <=10.1.0 | GHSA-v2v4-37r5-5v8g |
