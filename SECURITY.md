@@ -60,8 +60,9 @@ These are unresolved known risks, not false positives. Remediation owner:
 Claude Code, via semver-compatible updates in follow-up Notion task
 `3ac65cd1-7da6-81d0-b564-f10b18318bf3` (re-check when that task completes).
 Updated 2026-07-29 (execution-check re-audit): added GHSA-w62v-xxxg-mg59
-(hono, moderate, published after the initial table was written). New
-advisories detected by a later audit are appended here the same way.
+(hono, moderate). It was not present in the initial npm audit output
+recorded above; it was first detected by the execution-check re-audit.
+Advisories newly detected by a later audit are appended here the same way.
 
 | Package | Severity | Vulnerable range | Advisory IDs |
 |---|---|---|---|
