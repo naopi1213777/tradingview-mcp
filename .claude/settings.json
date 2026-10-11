@@ -1,0 +1,22 @@
+{
+  "permissions": {
+    "ask": ["Bash(dangerouslyDisableSandbox:true)"],
+    "deny": [
+      "Edit(//Users/mn/Library/Application Support/github-broker/**)",
+      "Read(//Users/mn/Library/Application Support/github-broker/git-tmp/**)",
+      "Edit(//Users/mn/Library/LaunchAgents/com.naopi1213777.github-broker.plist)"
+    ]
+  },
+  "sandbox": {
+    "enabled": true,
+    "failIfUnavailable": true,
+    "allowUnsandboxedCommands": true,
+    "filesystem": {
+      "allowWrite": ["/Users/mn/codex/mcp-tools/tradingview-mcp", "/Users/mn/Agent-Vault/10_Daily"]
+    }
+  },
+  "env": {
+    "GIT_CONFIG_GLOBAL": "/Users/mn/codex/ai-agent-rules/.gitconfig.sandbox",
+    "GIT_CONFIG_NOSYSTEM": "1"
+  }
+}
