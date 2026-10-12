@@ -5,3 +5,7 @@ temp_*
 *.log
 discovery-log.json
 rules.json
+
+# GitHub mission broker (mission #421): request queue and task worktrees
+.broker/
+.worktrees/
