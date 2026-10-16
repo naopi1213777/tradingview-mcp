@@ -45,18 +45,48 @@ release, rather than migrating to SDK2 or selecting every latest major.
 Declare the already-used zod4.3.6 directly because tool modules import it;
 this does not add a new runtime library to the existing installed graph.
 
-Resolve affected transitives within their existing compatible major lines.
+Resolve the bounded dependency closure of the selected fixes, preserving
+unaffected consumers' declared ranges and actual API compatibility. Prefer
+existing compatible major lines; a transitive major number alone is not a
+reason to reject a necessary upstream-declared dependency or add a review loop.
 The concrete verified fixed floors are @hono/node-server1.19.15,
 body-parser2.3.0, fast-uri3.1.8, hono4.13.7, ip-address10.7.1,
 proxy-addr2.0.8, qs6.16.0, brace-expansion1.1.21 and js-yaml4.3.2.
-Use these floors or a current patch in the same compatible line; preserve
-unaffected versions. Record every actual locked version and reason in the PR.
+Use these floors or a current patch in the same compatible line. Record every
+actual locked version, required new edge and reason in the PR.
 Prefer normal compatible resolution and a reproducible lock to permanent
-overrides; add a narrowly scoped override only if necessary to hold this
-reviewed major-line boundary. A new major, replacement library or incompatible
-API returns to design review before dependent work. Do not run blanket
+overrides; do not force a package beneath an upstream consumer's required
+range. A replacement library, incompatible application-facing API, changed
+permissions/destinations or an unassessed consequential dependency returns to
+design review before dependent work. Do not run blanket
 `npm audit fix --force`. Install with scripts disabled and review the resulting
 lock/integrities before using it; run `npm ci --ignore-scripts` on that lock.
+
+One required major-line addition is already assessed: body-parser2.3.0 declares
+content-type^2.0.0. Include content-type2.0.0 (or a compatible2.x patch) for that
+consumer, while retaining content-type1.0.5 for SDK1.31.0 and Express5.2.1,
+which declare^1.0.5. Normal npm resolution may nest the2.x package below
+body-parser; do not override all consumers to either major or force1.x beneath
+body-parser. Both body-parser2.3.0 and content-type2.0.0 require Node>=18,
+compatible with the selected SDK/runtime minimum and observed Node26.4.0.
+The official content-type2.0.0 distributable is CommonJS with parse/format
+exports, no dependencies and no install lifecycle. Its documented parse API
+takes a header string (not a request/response object), is lenient and returns
+type/parameters; body-parser2.3.0's getCharset passes the header string and
+reads parameters.charset. Consumers retaining the1.x API keep their own range.
+Registry package/source inspection is compatibility evidence, not an executed
+runtime result. The child checks npm's actual dependency tree for valid ranges
+and both resolved majors, plus focused body-parser JSON/text/urlencoded cases
+covering valid/invalid Content-Type and charset handling, and existing MCP
+stdio/tool-schema tests. It does not expose an HTTP listener or run an HTTP
+application merely to exercise this transitive dependency. Explain unexpected
+new closure edges against the same API/engine/access/destination boundary;
+neither blindly accept a resolver result nor block solely on a major number.
+Sources: https://registry.npmjs.org/body-parser/2.3.0 ,
+https://registry.npmjs.org/content-type/2.0.0 ,
+https://registry.npmjs.org/@modelcontextprotocol/sdk/1.31.0 and
+https://registry.npmjs.org/express/5.2.1 ; the content-type README/types and
+body-parser lib/utils.js were read from their metadata-named official tarballs.
 
 The registry metadata for SDK1.31.0 and CRI0.33.3 identifies respectively
 github.com/modelcontextprotocol/typescript-sdk and
