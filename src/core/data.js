@@ -199,11 +199,14 @@ async function ensureStrategyTesterReady({ entity_id, prepare = false } = {}, ev
     var changed = false, panel = false;
     var bwb = window.TradingView && window.TradingView.bottomWidgetBar;
     if (bwb && typeof bwb.showWidget === 'function') { bwb.showWidget('backtesting'); panel = true; }
-    if (f.strat.properties().visible.value() === false) {
-      f.strat.properties().visible.setValue(true);
-      changed = true;
-    }
-    return { panel_requested: panel, unhidden: changed };
+    var visibilityError = null;
+    try {
+      if (f.strat.properties().visible.value() === false) {
+        f.strat.properties().visible.setValue(true);
+        changed = true;
+      }
+    } catch (e) { visibilityError = e.message; }
+    return { panel_requested: panel, unhidden: changed, visibility_error: visibilityError };
   })()`) : { panel_requested: false, unhidden: false };
   const deadline = Date.now() + (prepare ? 6000 : 0);
   let ready;
@@ -550,7 +553,7 @@ export async function getPineLines({ study_filter, verbose } = {}) {
 export async function getPineLabels({ study_filter, max_labels, verbose, _deps } = {}) {
   const filter = study_filter || '';
   const raw = await (_deps?.evaluate || evaluate)(buildGraphicsJS('dwglabels', 'labels', filter));
-  if (!raw || raw.length === 0) return { success: true, study_count: 0, studies: [] };
+  if (!raw || raw.length === 0) return { success: false, data_available: false, study_count: 0, studies: [], note: 'No drawing data returned; empty/unavailable data is not verification of the required study.' };
 
   const limit = max_labels ?? 50;
   if (!Number.isInteger(limit) || limit < 1) throw new Error('max_labels must be a positive integer');
@@ -566,13 +569,13 @@ export async function getPineLabels({ study_filter, max_labels, verbose, _deps }
     if (labels.length > limit) labels = labels.slice(-limit);
     return { name: s.name, total_labels: s.count, eligible_labels: eligible, returned_labels: labels.length, showing: labels.length, truncated: eligible > labels.length, max_labels: limit, labels };
   });
-  return { success: true, study_count: studies.length, studies };
+  return { success: true, data_available: studies.some(s => (s.labels || s.tables)?.length > 0), study_count: studies.length, studies };
 }
 
 export async function getPineTables({ study_filter, _deps } = {}) {
   const filter = study_filter || '';
   const raw = await (_deps?.evaluate || evaluate)(buildGraphicsJS('dwgtablecells', 'tableCells', filter));
-  if (!raw || raw.length === 0) return { success: true, study_count: 0, studies: [] };
+  if (!raw || raw.length === 0) return { success: false, data_available: false, study_count: 0, studies: [], note: 'No drawing data returned; empty/unavailable data is not verification of the required study.' };
 
   const studies = raw.map(s => {
     const tables = {};
@@ -595,7 +598,7 @@ export async function getPineTables({ study_filter, _deps } = {}) {
     });
     return { name: s.name, tables: tableList };
   });
-  return { success: true, study_count: studies.length, studies };
+  return { success: true, data_available: studies.some(s => (s.labels || s.tables)?.length > 0), study_count: studies.length, studies };
 }
 
 export async function getPineBoxes({ study_filter, verbose } = {}) {

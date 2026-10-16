@@ -90,3 +90,8 @@ test('label truncation and table blank coordinates remain explicit', async () =>
   assert.equal(table.studies[0].tables[0].table_id, '7');
   assert.deepEqual(table.studies[0].tables[0].cells, [{ row: 0, column: 0, text: 'A' }, { row: 0, column: 1, text: '' }, { row: 0, column: 2, text: 'C' }]);
 });
+test('missing strategy/drawing data cannot pass as a required data check', async () => {
+  assert.equal((await getStrategyResults({ _deps: dataContext(0) })).success, false);
+  assert.equal((await getPineLabels({ _deps: { evaluate: async () => [] } })).success, false);
+  assert.equal((await getPineTables({ _deps: { evaluate: async () => [] } })).data_available, false);
+});
