@@ -119,8 +119,8 @@ localhost is represented as complete security or past-exposure proof.
 ## CDP target and operation boundaries
 
 Replace substring URL selection with shared parsed-URL classification.
-An eligible chart is a `page`, HTTPS, hostname exactly `tradingview.com` or
-`www.tradingview.com`, no userinfo, default HTTPS port, and a `/chart/` path
+An eligible chart is a `page`, HTTPS, hostname exactly `tradingview.com`,
+`www.tradingview.com` or `jp.tradingview.com`, no userinfo, default HTTPS port, and a `/chart/` path
 or its layout descendant. Reject look-alike suffixes, credentials in URLs,
 query-only/path-only matches and non-chart pages. Use one eligible chart
 automatically only when unambiguous; allow an explicit `TV_CDP_TARGET_ID`
@@ -129,6 +129,22 @@ bypasses classification. Preserve the supported host/port environment aliases;
 validate port range instead of silently replacing malformed values with9222.
 The intended deployment remains loopback127.0.0.1:9222; no remote endpoint is
 enabled or configured in this mission.
+
+Revision3 admits only the exact Japanese locale host additionally. Independent
+read-only `/json/list` metadata from the installed app3.4.1 shows the user's
+existing saved chart on HTTPS `jp.tradingview.com`, with page type, a chart
+layout path, default port and no userinfo/query/fragment. The official Japanese
+site at https://jp.tradingview.com/ independently establishes this locale
+endpoint; neither fact establishes trust in every subdomain or page. Retaining
+the existing chart avoids forcing a user locale/navigation/layout change.
+This remains the same TradingView service and account, with all operation,
+data-disclosure and saved-state limits unchanged. Do not accept arbitrary
+locale hosts, suffix matches, trailing-dot aliases or look-alike domains.
+Add proportionate classifier tests for the exact Japanese chart, explicit-ID
+selection and cached navigation involving it, and refusals for its HTTP,
+non-default-port, userinfo, non-chart and look-alike forms. Actual eligible
+chart use still needs the reviewed code and applicable state protections;
+metadata and public-site inspection are not execution or restoration proof.
 
 Validate the connected target's current identity before executing subsequent
 page operations so navigation cannot turn a cached client into a foreign-page
