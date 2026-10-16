@@ -2,16 +2,24 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
+import { readFileSync, existsSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 import { Readable } from 'node:stream';
 const require = createRequire(import.meta.url);
 const bodyParser = require('body-parser');
 const sdkRequire = createRequire(require.resolve('@modelcontextprotocol/sdk/server/mcp.js'));
 const parserRequire = createRequire(require.resolve('body-parser'));
 
+function version(loader, name) {
+  let dir = dirname(loader.resolve(name));
+  while (!existsSync(join(dir, 'package.json'))) dir = dirname(dir);
+  return JSON.parse(readFileSync(join(dir, 'package.json'))).version;
+}
+
 test('actual content-type majors coexist under valid consumer ranges', () => {
-  assert.match(sdkRequire('content-type/package.json').version, /^1\./);
-  assert.match(parserRequire('content-type/package.json').version, /^2\./);
-  assert.match(require('@hono/node-server/package.json').version, /^1\./);
+  assert.match(version(sdkRequire, 'content-type'), /^1\./);
+  assert.match(version(parserRequire, 'content-type'), /^2\./);
+  assert.match(version(require, '@hono/node-server'), /^1\./);
 });
 async function parse(kind, contentType, text) {
   const req = Readable.from([Buffer.from(text)]);
