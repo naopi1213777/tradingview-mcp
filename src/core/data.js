@@ -287,7 +287,7 @@ export async function getTrades({ max_trades, entity_id, prepare = false, _deps 
         if (!found) return {trades: [], source: 'internal_api', error: 'No strategy found on chart.'};
         var strat = found.strat;
         var orders = strat.ordersData(); if (orders && typeof orders.value === 'function') orders = orders.value();
-        if (!orders || !Array.isArray(orders)) return {trades: [], source: 'internal_api', total_orders: 0, error: 'Strategy orders not computed yet. Open the Strategy Tester panel (ui_open_panel strategy-tester) and retry.'};
+        if (!orders || !Array.isArray(orders)) return {trades: [], source: 'internal_api', total_orders: null, error: 'Strategy orders not computed yet. Open the Strategy Tester panel (ui_open_panel strategy-tester) and retry.'};
         var total = orders.length;
         // Return the most RECENT orders (tail) — that's what a trader wants to see.
         var start = Math.max(0, total - ${limit});
