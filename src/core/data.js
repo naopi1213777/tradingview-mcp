@@ -38,50 +38,27 @@ const FIND_STRATEGY_JS = `
       try { mi = s.metaInfo ? s.metaInfo() : null; } catch (e) {}
       var isStrat = mi && (mi.isTVScriptStrategy || mi.is_strategy);
       if ((isStrat || typeof s.reportData === 'function') && typeof s.reportData === 'function') {
-        strategies.push({ s: s, name: mi ? mi.description : null });
+        strategies.push({ s: s, id: String(s.id()), name: mi ? mi.description : null });
       }
     }
     return strategies;
   }
-  // Returns { strat, report } — prefers a strategy whose report is actually
-  // computed (the one selected in the Strategy Tester panel). With multiple
-  // strategies on the chart, only the selected one has non-null reportData,
-  // so returning the first strategy blindly reads the wrong (empty) one.
   function findStrategy() {
     var strategies = findStrategies();
-    // Prefer one with a computed report (has .performance).
-    for (var j = 0; j < strategies.length; j++) {
-      var rd = _reportOf(strategies[j].s);
-      if (rd && rd.performance) return { strat: strategies[j].s, report: rd, name: strategies[j].name, strategy_count: strategies.length };
+    var matches = requestedStrategyId == null ? strategies : strategies.filter(function(x) { return x.id === requestedStrategyId; });
+    if (matches.length > 1) throw new Error('Multiple strategies; provide exact entity_id');
+    if (!matches.length) {
+      if (requestedStrategyId != null) throw new Error('Selected strategy entity_id not found');
+      return null;
     }
-    // None computed — return the first so callers can hint "open the panel".
-    if (strategies.length) return { strat: strategies[0].s, report: null, name: strategies[0].name, strategy_count: strategies.length };
-    return null;
-  }
-  // TradingView never computes a report for a hidden strategy (crossed-out eye
-  // in the legend), so a hidden one looks identical to "panel not opened yet".
-  // Unhide any hidden strategies and report their names so callers can tell
-  // the user what changed.
-  function unhideStrategies() {
-    var unhidden = [];
-    var strategies = findStrategies();
-    for (var i = 0; i < strategies.length; i++) {
-      var s = strategies[i].s;
-      try {
-        var vis = null;
-        try { vis = s.properties().visible.value(); } catch (e) {}
-        if (vis !== false) continue;
-        var done = false;
-        try { s.properties().visible.setValue(true); done = true; } catch (e) {}
-        if (!done) {
-          try { var st = ${CHART_API}.getStudyById(s.id()); if (st) { st.setVisible(true); done = true; } } catch (e) {}
-        }
-        if (done) unhidden.push(strategies[i].name || 'strategy');
-      } catch (e) {}
-    }
-    return unhidden;
+    var selected = matches[0];
+    return { strat: selected.s, id: selected.id, report: _reportOf(selected.s), name: selected.name, strategy_count: strategies.length };
   }
 `;
+
+function strategyJS(entity_id) {
+  return `${FIND_STRATEGY_JS}\nvar requestedStrategyId = ${entity_id == null ? 'null' : safeString(entity_id)};`;
+}
 
 function buildGraphicsJS(collectionName, mapKey, filter) {
   return `
@@ -207,45 +184,48 @@ export async function getIndicator({ entity_id }) {
   return { success: true, entity_id, visible: data?.visible, inputs };
 }
 
-// #173: TradingView doesn't compute strategy report/orders until the Strategy
-// Tester panel is opened — and never computes one for a hidden strategy.
-// Ensure the panel is open (via bottomWidgetBar), unhide any hidden
-// strategies, and wait for reportData to populate, so the strategy read tools
-// work even when the panel started closed or the strategy was hidden.
-// Returns { status, unhidden } — unhidden lists strategies made visible.
-async function ensureStrategyTesterReady(maxWaitMs = 6000) {
-  const unhidden = await evaluate(`
-    (function() {
-      ${FIND_STRATEGY_JS}
-      try {
-        var bwb = window.TradingView && window.TradingView.bottomWidgetBar;
-        if (bwb && typeof bwb.showWidget === 'function') bwb.showWidget('backtesting');
-      } catch (e) {}
-      return unhideStrategies();
-    })()
-  `);
-  const deadline = Date.now() + maxWaitMs;
-  let status = 'timeout';
-  while (Date.now() < deadline) {
-    const ready = await evaluate(`
-      (function() {
-        ${FIND_STRATEGY_JS}
-        var f = findStrategy();
-        if (!f) return 'no-strategy';
-        return f.report && f.report.performance ? 'ready' : 'pending';
-      })()
-    `);
-    if (ready === 'ready' || ready === 'no-strategy') { status = ready; break; }
+// Reading has no preparation effects by default. Explicit preparation selects
+// one exact strategy before touching panel/visibility, and reports those effects.
+async function ensureStrategyTesterReady({ entity_id, prepare = false } = {}, evalIn = evaluate) {
+  const selected = await evalIn(`(function() {
+    ${strategyJS(entity_id)}
+    var f = findStrategy();
+    return f ? { id: f.id, name: f.name } : null;
+  })()`);
+  if (!selected) return { status: 'no-strategy', strategy_id: null, effects: { panel_requested: false, unhidden: false } };
+  const effects = prepare ? await evalIn(`(function() {
+    ${strategyJS(selected.id)}
+    var f = findStrategy();
+    var changed = false, panel = false;
+    var bwb = window.TradingView && window.TradingView.bottomWidgetBar;
+    if (bwb && typeof bwb.showWidget === 'function') { bwb.showWidget('backtesting'); panel = true; }
+    if (f.strat.properties().visible.value() === false) {
+      f.strat.properties().visible.setValue(true);
+      changed = true;
+    }
+    return { panel_requested: panel, unhidden: changed };
+  })()`) : { panel_requested: false, unhidden: false };
+  const deadline = Date.now() + (prepare ? 6000 : 0);
+  let ready;
+  do {
+    ready = await evalIn(`(function() {
+      ${strategyJS(selected.id)}
+      var f = findStrategy();
+      return !!(f && f.report && f.report.performance);
+    })()`);
+    if (ready || !prepare) break;
     await new Promise(r => setTimeout(r, 500));
-  }
-  return { status, unhidden: unhidden || [] };
+  } while (Date.now() < deadline);
+  return { status: ready ? 'ready' : 'not-ready', strategy_id: selected.id, effects };
 }
 
-export async function getStrategyResults() {
-  const ready = await ensureStrategyTesterReady();
-  const results = await evaluate(`
+export async function getStrategyResults({ entity_id, prepare = false, _deps } = {}) {
+  const evalIn = _deps?.evaluate || evaluate;
+  const ready = await ensureStrategyTesterReady({ entity_id, prepare }, evalIn);
+  if (ready.status === 'no-strategy') return { success: false, error: 'No strategy on chart', preparation: ready };
+  const results = await evalIn(`
     (function() {
-      ${FIND_STRATEGY_JS}
+      ${strategyJS(ready.strategy_id)}
       try {
         var found = findStrategy();
         if (!found) return {metrics: {}, source: 'internal_api', error: 'No strategy found on chart. Add a strategy first (e.g. indicator_add with a "... Strategy" script).'};
@@ -262,7 +242,7 @@ export async function getStrategyResults() {
           profit_factor: all.profitFactor,
           max_drawdown: perf.maxStrategyDrawDown,
           max_drawdown_percent: perf.maxStrategyDrawDownPercent,
-          total_trades: (all.numberOfWiningTrades || 0) + (all.numberOfLosingTrades || 0),
+          total_trades: Number.isFinite(all.numberOfWiningTrades) && Number.isFinite(all.numberOfLosingTrades) ? all.numberOfWiningTrades + all.numberOfLosingTrades : undefined,
           winning_trades: all.numberOfWiningTrades,
           losing_trades: all.numberOfLosingTrades,
           percent_profitable: all.percentProfitable,
@@ -287,17 +267,21 @@ export async function getStrategyResults() {
     metric_count: Object.keys(results?.metrics || {}).length,
     strategy: results?.strategy, currency: results?.currency, source: results?.source,
     metrics: results?.metrics || {},
-    ...(ready.unhidden.length && { unhidden_strategies: ready.unhidden, note: 'Strategy was hidden on the chart; it was made visible so the report could compute.' }),
+    strategy_id: ready.strategy_id, preparation: ready,
+
     error: results?.error,
   };
 }
 
-export async function getTrades({ max_trades } = {}) {
-  const limit = Math.min(max_trades || 20, MAX_TRADES);
-  const ready = await ensureStrategyTesterReady();
-  const trades = await evaluate(`
+export async function getTrades({ max_trades, entity_id, prepare = false, _deps } = {}) {
+  if (max_trades != null && (!Number.isInteger(max_trades) || max_trades < 1)) throw new Error('max_trades must be a positive integer');
+  const limit = Math.min(max_trades ?? 20, MAX_TRADES);
+  const evalIn = _deps?.evaluate || evaluate;
+  const ready = await ensureStrategyTesterReady({ entity_id, prepare }, evalIn);
+  if (ready.status === 'no-strategy') return { success: false, error: 'No strategy on chart', preparation: ready };
+  const trades = await evalIn(`
     (function() {
-      ${FIND_STRATEGY_JS}
+      ${strategyJS(ready.strategy_id)}
       try {
         var found = findStrategy();
         if (!found) return {trades: [], source: 'internal_api', error: 'No strategy found on chart.'};
@@ -329,18 +313,21 @@ export async function getTrades({ max_trades } = {}) {
   `);
   return {
     success: (trades?.trades?.length || 0) > 0,
-    trade_count: trades?.trades?.length || 0, total_orders: trades?.total_orders ?? 0,
+    trade_count: trades?.trades?.length || 0, total_orders: trades?.total_orders ?? null,
     source: trades?.source, trades: trades?.trades || [],
-    ...(ready.unhidden.length && { unhidden_strategies: ready.unhidden, note: 'Strategy was hidden on the chart; it was made visible so orders could compute.' }),
+    strategy_id: ready.strategy_id, preparation: ready,
+
     error: trades?.error,
   };
 }
 
-export async function getEquity() {
-  const ready = await ensureStrategyTesterReady();
-  const equity = await evaluate(`
+export async function getEquity({ entity_id, prepare = false, _deps } = {}) {
+  const evalIn = _deps?.evaluate || evaluate;
+  const ready = await ensureStrategyTesterReady({ entity_id, prepare }, evalIn);
+  if (ready.status === 'no-strategy') return { success: false, error: 'No strategy on chart', preparation: ready };
+  const equity = await evalIn(`
     (function() {
-      ${FIND_STRATEGY_JS}
+      ${strategyJS(ready.strategy_id)}
       try {
         var found = findStrategy();
         if (!found) return {data: [], source: 'internal_api', error: 'No strategy found on chart.'};
@@ -362,7 +349,8 @@ export async function getEquity() {
     success: (equity?.data?.length || 0) > 0,
     data_points: equity?.data?.length || 0, source: equity?.source, data: equity?.data || [],
     buy_hold_points: equity?.buy_hold_points, note: equity?.note,
-    ...(ready.unhidden.length && { unhidden_strategies: ready.unhidden }),
+    strategy_id: ready.strategy_id, preparation: ready,
+
     error: equity?.error,
   };
 }
@@ -559,12 +547,13 @@ export async function getPineLines({ study_filter, verbose } = {}) {
   return { success: true, study_count: studies.length, studies };
 }
 
-export async function getPineLabels({ study_filter, max_labels, verbose } = {}) {
+export async function getPineLabels({ study_filter, max_labels, verbose, _deps } = {}) {
   const filter = study_filter || '';
-  const raw = await evaluate(buildGraphicsJS('dwglabels', 'labels', filter));
+  const raw = await (_deps?.evaluate || evaluate)(buildGraphicsJS('dwglabels', 'labels', filter));
   if (!raw || raw.length === 0) return { success: true, study_count: 0, studies: [] };
 
-  const limit = max_labels || 50;
+  const limit = max_labels ?? 50;
+  if (!Number.isInteger(limit) || limit < 1) throw new Error('max_labels must be a positive integer');
   const studies = raw.map(s => {
     let labels = s.items.map(item => {
       const v = item.raw;
@@ -573,15 +562,16 @@ export async function getPineLabels({ study_filter, max_labels, verbose } = {}) 
       if (verbose) return { id: item.id, text, price, x: v.x, yloc: v.yl, size: v.sz, textColor: v.tci, color: v.ci };
       return { text, price };
     }).filter(l => l.text || l.price != null);
+    const eligible = labels.length;
     if (labels.length > limit) labels = labels.slice(-limit);
-    return { name: s.name, total_labels: s.count, showing: labels.length, labels };
+    return { name: s.name, total_labels: s.count, eligible_labels: eligible, returned_labels: labels.length, showing: labels.length, truncated: eligible > labels.length, max_labels: limit, labels };
   });
   return { success: true, study_count: studies.length, studies };
 }
 
-export async function getPineTables({ study_filter } = {}) {
+export async function getPineTables({ study_filter, _deps } = {}) {
   const filter = study_filter || '';
-  const raw = await evaluate(buildGraphicsJS('dwgtablecells', 'tableCells', filter));
+  const raw = await (_deps?.evaluate || evaluate)(buildGraphicsJS('dwgtablecells', 'tableCells', filter));
   if (!raw || raw.length === 0) return { success: true, study_count: 0, studies: [] };
 
   const studies = raw.map(s => {
@@ -600,7 +590,8 @@ export async function getPineTables({ study_filter } = {}) {
         const colNums = Object.keys(cols).map(Number).sort((a, b) => a - b);
         return colNums.map(cn => cols[cn]).filter(Boolean).join(' | ');
       }).filter(Boolean);
-      return { rows: formatted };
+      const cells = rowNums.flatMap(row => Object.keys(rows[row]).map(Number).sort((a, b) => a - b).map(column => ({ row, column, text: rows[row][column] })));
+      return { table_id: tid, rows: formatted, cells, extent: { rows: Math.max(...rowNums) + 1, columns: Math.max(...cells.map(c => c.column)) + 1 }, note: 'Cells retain returned empty strings and indices; absent cells, decoration and timeframe identity are not inferred.' };
     });
     return { name: s.name, tables: tableList };
   });

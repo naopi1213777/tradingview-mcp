@@ -1,4 +1,5 @@
 import CDP from 'chrome-remote-interface';
+import { parsePort, listTargets, selectChartTarget, isChartTarget } from './targets.js';
 
 let client = null;
 let targetInfo = null;
@@ -6,9 +7,8 @@ let targetInfo = null;
 // Default is 127.0.0.1, not localhost: on some Windows machines localhost
 // resolves to ::1 first, and Electron's --remote-debugging-port only listens on IPv4.
 export const CDP_HOST = process.env.TV_CDP_HOST || process.env.CDP_HOST || '127.0.0.1';
-export const CDP_PORT = Number(process.env.TV_CDP_PORT || process.env.CDP_PORT) || 9222;
-const MAX_RETRIES = 5;
-const BASE_DELAY = 500;
+export const CDP_PORT = parsePort(process.env.TV_CDP_PORT ?? process.env.CDP_PORT ?? 9222);
+let selectedTargetId = process.env.TV_CDP_TARGET_ID;
 
 // Known direct API paths discovered via live probing (see PROBE_RESULTS.md)
 const KNOWN_PATHS = {
@@ -52,44 +52,34 @@ export function requireFinite(value, name) {
 
 export async function getClient() {
   if (client) {
-    try {
-      // Quick liveness check
-      await client.Runtime.evaluate({ expression: '1', returnByValue: true });
-      return client;
-    } catch {
-      client = null;
-      targetInfo = null;
-    }
+    // A stale/moved target is an error, never a reason to replay work on another chart.
+    const current = selectChartTarget(await listTargets(CDP_HOST, CDP_PORT), targetInfo.id);
+    if (current.url !== targetInfo.url) throw new Error('Cached CDP target navigated; select the intended tab again');
+    const location = await client.Runtime.evaluate({ expression: 'location.href', returnByValue: true });
+    selectChartTarget([{ ...current, url: location.result?.value }], current.id);
+    targetInfo = current;
+    return client;
   }
-  return connect();
+  return connect(selectedTargetId);
 }
 
-export async function connect(targetId = null) {
-  let lastError;
-  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
-    try {
-      const target = targetId ? await findTargetById(targetId) : await findChartTarget();
-      if (!target) {
-        throw new Error(targetId
-          ? `CDP target ${targetId} not found — is the tab still open?`
-          : 'No TradingView chart target found. Is TradingView open with a chart?');
-      }
-      targetInfo = target;
-      client = await CDP({ host: CDP_HOST, port: CDP_PORT, target: target.id });
-
-      // Enable required domains
-      await client.Runtime.enable();
-      await client.Page.enable();
-      await client.DOM.enable();
-
-      return client;
-    } catch (err) {
-      lastError = err;
-      const delay = Math.min(BASE_DELAY * Math.pow(2, attempt), 30000);
-      await new Promise(r => setTimeout(r, delay));
-    }
+export async function connect(targetId = selectedTargetId) {
+  const target = selectChartTarget(await listTargets(CDP_HOST, CDP_PORT), targetId);
+  const next = await CDP({ host: CDP_HOST, port: CDP_PORT, target: target.id });
+  try {
+    await next.Runtime.enable();
+    await next.Page.enable();
+    await next.DOM.enable();
+    const location = await next.Runtime.evaluate({ expression: 'location.href', returnByValue: true });
+    selectChartTarget([{ ...target, url: location.result?.value }], target.id);
+  } catch (error) {
+    await next.close();
+    throw error;
   }
-  throw new Error(`CDP connection failed after ${MAX_RETRIES} attempts: ${lastError?.message}`);
+  client = next;
+  targetInfo = target;
+  selectedTargetId = target.id;
+  return client;
 }
 
 /**
@@ -104,35 +94,19 @@ export async function reconnectTo(targetId) {
     client = null;
     targetInfo = null;
   }
+  selectedTargetId = targetId;
   return connect(targetId);
 }
 
-async function findChartTarget() {
-  const resp = await fetch(`http://${CDP_HOST}:${CDP_PORT}/json/list`);
-  const targets = await resp.json();
-  // Prefer targets with tradingview.com/chart in the URL
-  return targets.find(t => t.type === 'page' && /tradingview\.com\/chart/i.test(t.url))
-    || targets.find(t => t.type === 'page' && /tradingview/i.test(t.url))
-    || null;
-}
-
-async function findTargetById(id) {
-  const resp = await fetch(`http://${CDP_HOST}:${CDP_PORT}/json/list`);
-  const targets = await resp.json();
-  return targets.find(t => t.id === id) || null;
-}
-
 export async function getTargetInfo() {
-  if (!targetInfo) {
-    await getClient();
-  }
+  await getClient();
   return targetInfo;
 }
 
 export async function evaluate(expression, opts = {}) {
   const c = await getClient();
   const result = await c.Runtime.evaluate({
-    expression,
+    expression: `if (!(${isChartTarget.toString()})({type:'page',id:${safeString(targetInfo.id)},url:location.href}) || location.href !== ${safeString(targetInfo.url)}) throw new Error('CDP target navigated');\n${expression}`,
     returnByValue: true,
     awaitPromise: opts.awaitPromise ?? false,
     ...opts,
