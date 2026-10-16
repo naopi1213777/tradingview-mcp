@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
-import { WebSocketServer } from 'ws';
+import WebSocket from 'ws';
 import vm from 'node:vm';
 test('cached navigation/disappearance refuses work instead of selecting another chart', async () => {
   let url = 'https://www.tradingview.com/chart/layout/';
@@ -15,7 +15,7 @@ test('cached navigation/disappearance refuses work instead of selecting another 
     else if (req.url === '/json/protocol') res.end(JSON.stringify({ version: { major: '1', minor: '3' }, domains: ['Runtime', 'Page', 'DOM'].map(domain => ({ domain, commands: [{ name: 'enable' }, ...(domain === 'Runtime' ? [{ name: 'evaluate', parameters: [{ name: 'expression', type: 'string' }], returns: [{ name: 'result', type: 'object' }] }] : [])] })) }));
     else { res.statusCode = 404; res.end('{}'); }
   });
-  const ws = new WebSocketServer({ server });
+  const ws = new WebSocket.Server({ server });
   ws.on('connection', socket => socket.on('message', message => {
     const call = JSON.parse(String(message));
     let result = {};
