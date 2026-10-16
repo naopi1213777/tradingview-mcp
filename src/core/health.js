@@ -214,7 +214,7 @@ function _resolveLaunchDeps(deps) {
     probeCdp: deps?.probeCdp || _probeCdp,
     isRunning: deps?.isRunning || (() => {
       try {
-        const cmd = process.platform === 'win32' ? 'tasklist /FI "IMAGENAME eq TradingView.exe" /NH' : 'pgrep -x TradingView';
+        const cmd = process.platform === 'win32' ? 'tasklist /FI "IMAGENAME eq TradingView.exe" /NH' : 'pgrep -ix TradingView';
         const output = (deps?.execSync || execSync)(cmd, { timeout: 3000, stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim();
         return process.platform === 'win32' ? /TradingView\.exe/i.test(output) : !!output;
       } catch (e) { if (e.status === 1) return false; throw new Error('Cannot establish whether TradingView is running'); }

@@ -106,10 +106,10 @@ export async function getTargetInfo() {
 export async function evaluate(expression, opts = {}) {
   const c = await getClient();
   const result = await c.Runtime.evaluate({
+    ...opts,
     expression: `if (!(${isChartTarget.toString()})({type:'page',id:${safeString(targetInfo.id)},url:location.href}) || location.href !== ${safeString(targetInfo.url)}) throw new Error('CDP target navigated');\n${expression}`,
     returnByValue: true,
     awaitPromise: opts.awaitPromise ?? false,
-    ...opts,
   });
   if (result.exceptionDetails) {
     const msg = result.exceptionDetails.exception?.description
