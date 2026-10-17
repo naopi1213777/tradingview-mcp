@@ -64,7 +64,7 @@ Common Pine Script errors:
 
 After clean compilation:
 1. `capture_screenshot` — take a screenshot to verify it looks right
-2. `data_get_strategy_results` — if it's a strategy, check performance
+2. `data_get_strategy_results` — if it's a strategy, check snake_case performance (`metrics.net_profit`, etc.) using its exact `entity_id` when ambiguous. Preparation is opt-in (`prepare:true`) and reports panel/visibility effects; unavailable results are not zero.
 3. Show the user the results
 
 ## Step 7: Iterate

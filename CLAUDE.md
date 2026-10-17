@@ -49,7 +49,7 @@ Use `study_filter` parameter to target a specific indicator by name substring (e
 5. `pine_get_source` → read current code back (WARNING: can be very large for complex scripts)
 6. `pine_save` → save to TradingView cloud
 7. `pine_new` → create blank indicator/strategy/library
-8. `pine_open` → load a saved script by name
+8. `pine_open` → open exact saved ID/version (or unique exact name) in an already displayed clean saved editor; no source injection/compile/save
 
 ### "Practice trading with replay"
 1. `replay_start` with `date: "2025-03-01"` → enter replay mode

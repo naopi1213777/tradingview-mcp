@@ -2,6 +2,11 @@ import { z } from 'zod';
 import { jsonResult } from './_format.js';
 import * as core from '../core/data.js';
 
+const strategyOptions = {
+  entity_id: z.string().optional().describe('Exact strategy entity ID; required when multiple strategies exist'),
+  prepare: z.boolean().optional().describe('Explicitly open tester and unhide only the selected strategy; defaults false. Effects are reported.'),
+};
+
 export function registerDataTools(server) {
   server.tool('data_get_ohlcv', 'Get OHLCV bar data from the chart. Use summary=true for compact stats instead of all bars (saves context).', {
     count: z.coerce.number().optional().describe('Number of bars to retrieve (max 500, default 100)'),
@@ -18,20 +23,21 @@ export function registerDataTools(server) {
     catch (err) { return jsonResult({ success: false, error: err.message }, true); }
   });
 
-  server.tool('data_get_strategy_results', 'Get strategy performance metrics from Strategy Tester. Auto-opens the panel and auto-unhides a hidden strategy (TradingView never computes reports for hidden strategies); result includes unhidden_strategies when that happened.', {}, async () => {
-    try { return jsonResult(await core.getStrategyResults()); }
+  server.tool('data_get_strategy_results', 'Read snake_case strategy metrics (including net_profit). No panel/visibility changes unless prepare=true. Missing reports are not successful zero results.', strategyOptions, async (options) => {
+    try { return jsonResult(await core.getStrategyResults(options)); }
     catch (err) { return jsonResult({ success: false, error: err.message }, true); }
   });
 
-  server.tool('data_get_trades', 'Get trade list from Strategy Tester. Auto-opens the panel and auto-unhides a hidden strategy.', {
-    max_trades: z.coerce.number().optional().describe('Maximum trades to return'),
-  }, async ({ max_trades }) => {
-    try { return jsonResult(await core.getTrades({ max_trades })); }
+  server.tool('data_get_trades', 'Read the selected strategy trade list. Explicit prepare=true can open tester/unhide that strategy.', {
+    ...strategyOptions,
+    max_trades: z.coerce.number().int().positive().optional().describe('Maximum trades to return (capped at 20)'),
+  }, async (options) => {
+    try { return jsonResult(await core.getTrades(options)); }
     catch (err) { return jsonResult({ success: false, error: err.message }, true); }
   });
 
-  server.tool('data_get_equity', 'Get equity curve data from Strategy Tester', {}, async () => {
-    try { return jsonResult(await core.getEquity()); }
+  server.tool('data_get_equity', 'Read selected strategy equity data; reports unavailable curves explicitly.', strategyOptions, async (options) => {
+    try { return jsonResult(await core.getEquity(options)); }
     catch (err) { return jsonResult({ success: false, error: err.message }, true); }
   });
 
@@ -57,14 +63,14 @@ export function registerDataTools(server) {
 
   server.tool('data_get_pine_labels', 'Read text labels drawn by Pine Script indicators (label.new). Returns text and price pairs. Use study_filter to target a specific indicator.', {
     study_filter: z.string().optional().describe('Substring to match study name. Omit for all.'),
-    max_labels: z.coerce.number().optional().describe('Max labels per study (default 50). Set higher if you need all.'),
+    max_labels: z.coerce.number().int().positive().optional().describe('Max labels per study (default 50). Set higher if you need all.'),
     verbose: z.coerce.boolean().optional().describe('Return raw label data with IDs, colors, positions (default false — returns only text + price)'),
   }, async ({ study_filter, max_labels, verbose }) => {
     try { return jsonResult(await core.getPineLabels({ study_filter, max_labels, verbose })); }
     catch (err) { return jsonResult({ success: false, error: err.message }, true); }
   });
 
-  server.tool('data_get_pine_tables', 'Read table data drawn by Pine Script indicators (table.new). Returns formatted text rows per table. Use study_filter to target a specific indicator.', {
+  server.tool('data_get_pine_tables', 'Read table data drawn by Pine Script indicators (table.new). Returns formatted rows plus table IDs and indexed cells, including returned empty cells. Missing cells/decoration/timeframe identity are not inferred. Use study_filter to target a specific indicator.', {
     study_filter: z.string().optional().describe('Substring to match study name. Omit for all.'),
   }, async ({ study_filter }) => {
     try { return jsonResult(await core.getPineTables({ study_filter })); }

@@ -65,7 +65,7 @@ const onWindows = process.platform === 'win32';
 describe('launch() — MSIX WindowsApps handling', { skip: !onWindows }, () => {
   it('direct WindowsApps spawn that binds CDP does not copy', async () => {
     const { deps, state } = msixDeps({ cdpBindsFor: ['WindowsApps'] });
-    const result = await launch({ _deps: deps });
+    const result = await launch({ kill_existing: true, _deps: deps });
     assert.equal(result.success, true);
     assert.equal(result.binary, MSIX_EXE);
     assert.equal(result.msix_local_copy, undefined);
@@ -75,7 +75,7 @@ describe('launch() — MSIX WindowsApps handling', { skip: !onWindows }, () => {
 
   it('EACCES on direct spawn falls back to local copy', async () => {
     const { deps, state } = msixDeps({ spawnFailures: ['WindowsApps'], cdpBindsFor: ['tradingview-mcp'] });
-    const result = await launch({ _deps: deps });
+    const result = await launch({ kill_existing: true, _deps: deps });
     assert.equal(result.success, true);
     assert.equal(result.msix_local_copy, true);
     assert.equal(result.binary, LOCAL_COPY_EXE);
@@ -90,7 +90,7 @@ describe('launch() — MSIX WindowsApps handling', { skip: !onWindows }, () => {
 
   it('CDP never binding on direct spawn falls back to local copy', async () => {
     const { deps, state } = msixDeps({ cdpBindsFor: ['tradingview-mcp'] });
-    const result = await launch({ _deps: deps });
+    const result = await launch({ kill_existing: true, _deps: deps });
     assert.equal(result.success, true);
     assert.equal(result.msix_local_copy, true);
     assert.equal(state.spawned.length, 2);
@@ -100,7 +100,7 @@ describe('launch() — MSIX WindowsApps handling', { skip: !onWindows }, () => {
 
   it('reuses an existing local copy without re-copying', async () => {
     const { deps, state } = msixDeps({ spawnFailures: ['WindowsApps'], cdpBindsFor: ['tradingview-mcp'], copyExists: true });
-    const result = await launch({ _deps: deps });
+    const result = await launch({ kill_existing: true, _deps: deps });
     assert.equal(result.success, true);
     assert.equal(result.msix_local_copy, true);
     assert.equal(state.copies.length, 0);
@@ -108,8 +108,8 @@ describe('launch() — MSIX WindowsApps handling', { skip: !onWindows }, () => {
 
   it('returns cdp_ready:false warning when nothing binds', async () => {
     const { deps } = msixDeps({});
-    const result = await launch({ _deps: deps });
-    assert.equal(result.success, true);
+    const result = await launch({ kill_existing: true, _deps: deps });
+    assert.equal(result.success, false);
     assert.equal(result.cdp_ready, false);
     assert.equal(result.msix_local_copy, true);
     assert.ok(result.warning);
@@ -130,7 +130,7 @@ describe('launch() — classic install path', { skip: !onWindows }, () => {
       delay: async () => {},
       probeCdp: async () => (state.cdpUp ? CDP_VERSION : null),
     };
-    const result = await launch({ _deps: deps });
+    const result = await launch({ kill_existing: true, _deps: deps });
     assert.equal(result.success, true);
     assert.equal(result.binary, classicExe);
     assert.equal(result.msix_local_copy, undefined);
@@ -145,6 +145,6 @@ describe('launch() — classic install path', { skip: !onWindows }, () => {
       cpSync: () => {}, rmSync: () => {}, readdirSync: () => [],
       delay: async () => {}, probeCdp: async () => null,
     };
-    await assert.rejects(() => launch({ _deps: deps }), /TradingView not found/);
+    await assert.rejects(() => launch({ kill_existing: true, _deps: deps }), /TradingView not found/);
   });
 });

@@ -22,6 +22,7 @@
 import { describe, it, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import CDP from 'chrome-remote-interface';
+import { selectChartTarget } from '../src/targets.js';
 
 let client;
 let Runtime;
@@ -72,8 +73,7 @@ describe('TradingView MCP — Full E2E (70 tools)', () => {
   before(async () => {
     try {
       const targets = await CDP.List({ host: 'localhost', port: 9222 });
-      const chartTarget = targets.find(t => t.url && t.url.includes('tradingview.com/chart'));
-      if (!chartTarget) throw new Error('No TradingView chart target found');
+      const chartTarget = selectChartTarget(targets, process.env.TV_CDP_TARGET_ID);
 
       client = await CDP({ host: 'localhost', port: 9222, target: chartTarget.id });
       await client.Runtime.enable();
@@ -847,7 +847,7 @@ describe('TradingView MCP — Full E2E (70 tools)', () => {
       assert.ok(typeof hasPineToolbar === 'boolean', 'Pine toolbar detection works');
     });
 
-    it('pine_open — script dropdown access', async () => {
+    it('legacy Pine toolbar dropdown access', async () => {
       // Same as pine_new — tests toolbar button access
       const ready = await ensureEditor();
       if (!ready) return;
@@ -856,7 +856,7 @@ describe('TradingView MCP — Full E2E (70 tools)', () => {
     });
 
     it('pine_list_scripts — scrape dropdown items', async () => {
-      // Tests the same path as pine_open — dropdown scraping
+      // Legacy UI probe only; native pine_open has offline contract coverage.
       const ready = await ensureEditor();
       if (!ready) return;
       // Just verify we can find the bottom area buttons
