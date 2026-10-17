@@ -11,7 +11,7 @@ export function parsePort(value = 9222) {
 }
 
 export function isChartTarget(target) {
-  if (target?.type !== 'page' || typeof target.id !== 'string' || !target.id) return false;
+  if (target?.type !== 'page' || typeof target.id !== 'string' || !/^[A-Za-z0-9_-]+$/.test(target.id)) return false;
   try {
     const u = new URL(target.url);
     return u.protocol === 'https:' && ['tradingview.com', 'www.tradingview.com', 'jp.tradingview.com'].includes(u.hostname)
@@ -26,6 +26,7 @@ export function selectChartTarget(targets, id) {
   if (matches.length !== 1) throw new Error(id != null
     ? 'Explicit CDP target is missing, duplicated or not an eligible TradingView chart'
     : matches.length ? 'Multiple TradingView charts: select TV_CDP_TARGET_ID or switch to an explicit tab' : 'No eligible TradingView chart target');
+  if (targets.filter(t => t.id === matches[0].id).length !== 1) throw new Error('Duplicate CDP target ID');
   return matches[0];
 }
 
@@ -40,7 +41,7 @@ const resourceRoots = process.platform === 'darwin' ? [
 ] : ['/opt/TradingView/resources', '/usr/share/tradingview/resources'];
 
 export function isAppTarget(target, kind) {
-  if (target?.type !== 'page' || !target.id || !['window', 'new-tab'].includes(kind)) return false;
+  if (target?.type !== 'page' || typeof target.id !== 'string' || !/^[A-Za-z0-9_-]+$/.test(target.id) || !['window', 'new-tab'].includes(kind)) return false;
   try {
     const u = new URL(target.url);
     if (u.protocol !== 'file:' || u.host || u.hash || [...u.searchParams.keys()].some(k => k !== 'rendererInitialData') || u.searchParams.getAll('rendererInitialData').length > 1) return false;

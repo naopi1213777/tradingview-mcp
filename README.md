@@ -402,7 +402,8 @@ The server remains stdio, with the existing local CDP endpoint (127.0.0.1:9222).
 `TV_CDP_HOST`/`CDP_HOST` and `TV_CDP_PORT`/`CDP_PORT` aliases remain supported;
 invalid ports are errors. Endpoint configuration is trusted operator input.
 
-Only eligible HTTPS TradingView chart pages are selectable. An ambiguous chart
+Only eligible HTTPS chart pages on exact `tradingview.com`,
+`www.tradingview.com` or `jp.tradingview.com` are selectable. An ambiguous chart
 list is an error: set `TV_CDP_TARGET_ID` to one exact eligible page ID or use an
 explicit tab switch. IDs do not bypass URL checks. A cached target that navigates
 or disappears is rejected; work is not silently replayed on another chart.

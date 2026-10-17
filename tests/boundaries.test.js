@@ -106,3 +106,10 @@ test('exact Japanese host retains scheme, credentials, path, port and ID boundar
     assert.equal(isAppTarget(chart(prefix + '?arbitrary=test'), 'window'), false);
   }
 });
+
+test('a foreign duplicate ID cannot alias an eligible target', () => {
+  const valid = chart('https://jp.tradingview.com/chart/layout/', 'same');
+  assert.throws(() => selectChartTarget([valid, chart('https://evil.example/', 'same')]), /Duplicate/);
+  assert.throws(() => selectChartTarget([valid, chart('https://evil.example/', 'same')], 'same'), /Duplicate/);
+  for (const id of ['', ' ', '../x', 'x/y']) assert.equal(isChartTarget(chart('https://tradingview.com/chart/', id)), false);
+});
