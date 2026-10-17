@@ -1,13 +1,13 @@
 # Setup Guide for Claude Code
 
-This file is a step-by-step guide for Claude Code (or any LLM agent) to install and configure the TradingView MCP server. If a user asks you to install or set up this project, follow these steps exactly.
+This file is a step-by-step guide for Claude Code (or any LLM agent) to install and configure the TradingView MCP server. If a user asks you to install or set up this project, use the reviewed fork and the operation boundaries below. Existing registrations are reused; a setup example does not authorize configuration, authentication or saved-state changes.
 
 ## Step 1: Clone and Install
 
 ```bash
-git clone https://github.com/tradesdontlie/tradingview-mcp.git ~/tradingview-mcp
+git clone https://github.com/naopi1213777/tradingview-mcp.git ~/tradingview-mcp
 cd ~/tradingview-mcp
-npm install
+npm ci --ignore-scripts
 ```
 
 If the user specifies a different install path, use that instead of `~/tradingview-mcp`.
@@ -35,54 +35,31 @@ If the config file already exists and has other servers, merge the `tradingview`
 
 TradingView Desktop must be running with Chrome DevTools Protocol enabled.
 
-**Auto-detect and launch (recommended):**
-After the MCP server is connected, use the `tv_launch` tool — it auto-detects TradingView on Mac, Windows, and Linux.
+**Guarded launch:** use `tv_launch` with `{"port":9222,"kill_existing":false}`,
+or `node src/cli/index.js launch`. It removes inherited `ELECTRON_RUN_AS_NODE`
+only for the app child, preserves the MCP parent environment, and reuses a
+verified existing debug endpoint. A running non-debug instance is a conflict;
+its owner must check unsaved state and close it normally before another attempt.
+Never terminate an unknown process or select a save/discard confirmation to
+make a check pass. A PID alone is not readiness: inspect `success` and `cdp_ready`.
 
-**Manual launch by platform:**
+The legacy `scripts/launch_tv_debug*` wrappers terminate app processes and lack
+these guards; do not use them as the routine startup or verification shortcut.
+Manual startup using the installed app's `--remote-debugging-port=9222` flag
+remains available. Preserve the existing profile and chart.
 
-Mac:
-```bash
-/Applications/TradingView.app/Contents/MacOS/TradingView --remote-debugging-port=9222
-```
-
-Windows:
-
-TradingView for Windows now ships **only as an MSIX package** (Microsoft Store and tvd-packages.tradingview.com both install under `C:\Program Files\WindowsApps\`). Use the launch script — it resolves the install via `Get-AppxPackage`, which works without admin rights:
-
-```bat
-scripts\launch_tv_debug.bat
-```
-
-Or, preferred: let the `tv_launch` MCP tool do it — it auto-detects MSIX installs and, on Windows builds where launching from `WindowsApps` is blocked with **"Access is denied"**, automatically copies the package to `%LOCALAPPDATA%\tradingview-mcp\` (one-time, ~330MB) and launches from the copy. The copy keeps your login, layout, and chart state. If the fallback was used, the result includes `msix_local_copy: true`.
-
-Manual equivalent of that fallback, if you need it:
-
-```powershell
-$pkg = (Get-AppxPackage TradingView.Desktop).InstallLocation
-Copy-Item "$pkg\*" "$env:LOCALAPPDATA\tradingview-mcp\TradingView" -Recurse -Force
-& "$env:LOCALAPPDATA\tradingview-mcp\TradingView\TradingView.exe" --remote-debugging-port=9222
-```
-
-Reading files out of `WindowsApps` by exact path is allowed even where executing them isn't. Do **not** try to change ACLs on `WindowsApps` with `icacls` — it fails and can break app servicing.
-
-Legacy (pre-MSIX) installs:
-```bash
-%LOCALAPPDATA%\TradingView\TradingView.exe --remote-debugging-port=9222
-```
-
-Linux:
-```bash
-/opt/TradingView/tradingview --remote-debugging-port=9222
-# or: tradingview --remote-debugging-port=9222
-```
+On Windows Store installations, local-copy fallback requires the explicit
+`kill_existing:true` destructive-restart option; it is not attempted by default.
+That option may terminate existing instances and create a separate app copy.
+It is outside the macOS deployment verified here. Do not change WindowsApps ACLs.
 
 ## Step 4: Restart Claude Code
 
 The MCP server only loads when Claude Code starts. After adding the config:
 
-1. Exit Claude Code (Ctrl+C)
-2. Relaunch Claude Code
-3. The tradingview MCP server should connect automatically
+1. Have the owner restart only the affected MCP client through its normal interface.
+2. Confirm it rereads the existing canonical `src/server.js` command and current main.
+3. Verify the connection from that actual client. A merge or separate SDK test does not reload an already-running registered server.
 
 ## Step 5: Verify Connection
 
@@ -97,7 +74,7 @@ Use the `tv_health_check` tool. Expected response:
 }
 ```
 
-If `cdp_connected: false`, TradingView is not running with `--remote-debugging-port=9222`.
+On failure, inspect the returned error and current endpoint/target before another operation. An unavailable, foreign or ambiguous target is not proof that the app is absent. Select only an exact eligible chart ID; see [architecture](docs/architecture.md).
 
 ## Step 6: Install CLI (Optional)
 
@@ -115,15 +92,15 @@ Then `tv status`, `tv quote`, `tv pine compile`, etc. work from anywhere.
 | Problem | Solution |
 |---------|----------|
 | `cdp_connected: false` | Launch TradingView with `--remote-debugging-port=9222` |
-| Windows: "Access is denied" launching from `WindowsApps` | Use `tv_launch` (auto copy-fallback) or the manual copy snippet in Step 3 — never `icacls` on WindowsApps |
+| Windows: "Access is denied" launching from `WindowsApps` | Default launch returns failure; local-copy fallback requires a deliberate destructive restart decision. Never change WindowsApps ACLs |
 | `ECONNREFUSED` | TradingView isn't running or port 9222 is blocked |
 | MCP server not showing in Claude Code | Check `~/.claude/.mcp.json` syntax, restart Claude Code |
 | `tv` command not found | Run `npm link` from the project directory |
 | Tools return stale data | TradingView may still be loading — wait a few seconds |
-| Pine Editor tools fail | Open the Pine Editor panel first (`ui_open_panel pine-editor open`) |
+| Saved-Pine open fails | Inspect identity/dirty/draft/dialog state first; display one clean saved editor deliberately. Do not inject, compile, save or discard to repair a failure |
 
 ## What to Read Next
 
 - `CLAUDE.md` — Decision tree for which tool to use when (auto-loaded by Claude Code)
-- `README.md` — Full tool reference (78 MCP tools, 30 CLI commands)
+- `README.md` — Tool reference and operation effects
 - `RESEARCH.md` — Research context and open questions
