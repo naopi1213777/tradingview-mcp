@@ -77,6 +77,7 @@ CDP controls an authenticated app and arbitrary evaluation can access page
 credentials, transmit data and affect saved state. Installation downloads from
 the official npm registry; ordinary runtime uses the existing localhost CDP and
 TradingView destinations. No elevation, auth/config change, new telemetry,
-runtime copy or registration-path switch is introduced. Real saved-script
-identity/restoration and actual T3 Claude-host verification remain separate
-required evidence at their guarded phase boundaries.
+runtime copy or registration-path switch is introduced. The dated subsequent
+saved-script identity/restoration and Codex SDK application
+observations, along with still-pending registered-client reload and actual T3
+Claude-host evidence, are distinguished in [current architecture](architecture.md).

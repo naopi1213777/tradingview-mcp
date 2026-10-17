@@ -9,24 +9,23 @@ Personal AI assistant for your TradingView Desktop charts. Connects Claude Code 
 > **Requires a valid TradingView subscription.** This tool does not bypass or circumvent any TradingView paywall or access control. It reads from and controls the TradingView Desktop app already running on your machine.
 
 > [!NOTE]
-> **All data processing occurs locally on your machine.** No TradingView data is transmitted, stored, or redistributed externally by this tool.
+> **The bridge runs locally; disclosure depends on the caller and operation.** Tool results can reach your configured AI provider, and page operations can make authenticated TradingView or other network requests. See [Security](SECURITY.md) and the [current architecture](docs/architecture.md).
 
 > [!CAUTION]
 > This tool accesses undocumented internal TradingView APIs via the Electron debug interface. These can change or break without notice in any TradingView update. Pin your TradingView Desktop version if stability matters to you.
 
-## How It Works (and why it's safe to run)
+## How It Works
 
-This tool does not connect to TradingView's servers, modify any TradingView files, or intercept any network traffic. It communicates exclusively with your locally running TradingView Desktop instance via Chrome DevTools Protocol (CDP) — a standard debugging interface built into all Chromium/Electron applications by Google, including VS Code, Slack, and Discord.
+The MCP server uses stdio and controls the locally running TradingView Desktop app through Chrome DevTools Protocol (CDP). It does not patch the installed app. The authenticated page still communicates with TradingView, and chart, Pine, alert, replay, layout and arbitrary JavaScript operations can change account or saved state. Local transport is not a read-only or security boundary.
 
-The debug port is disabled by default and must be explicitly enabled by you using a standard Chromium flag (`--remote-debugging-port=9222`). Nothing happens without that deliberate step.
+CDP requires the app's `--remote-debugging-port=9222` flag. The guarded launcher can supply that flag; choose the launch or reuse deliberately.
 
 ## What This Tool Does Not Do
 
-- Connect to TradingView's servers or APIs
-- Store, transmit, or redistribute any market data
+- Provide an isolated, read-only sandbox or a guarantee that data stays local
 - Work without a valid TradingView subscription and installed Desktop app
 - Bypass any TradingView paywall or access restriction
-- Execute real trades (chart interaction only)
+- Authorize trading or account changes on the caller's behalf; powerful page operations require deliberate trusted use
 - Work if TradingView changes their internal Electron structure
 
 ## Research Context
@@ -48,7 +47,7 @@ See [RESEARCH.md](RESEARCH.md) for open questions, findings, and related work.
 ## Prerequisites
 
 - **TradingView Desktop app** (paid subscription required for real-time data)
-- **Node.js 18+**
+- **Node.js 18.14.1+** (development linting has a higher Node requirement; see [dependency verification](docs/dependency-verification.md))
 - **Claude Code** with MCP support (for MCP tools) or any terminal (for CLI)
 - **macOS, Windows, or Linux**
 
@@ -70,9 +69,9 @@ Gives your AI assistant eyes and hands on your own chart:
 
 ## Install with Claude Code
 
-Paste this into Claude Code and it will handle the rest:
+For this fork, keep the existing canonical deployment:
 
-> Install the TradingView MCP server. Clone https://github.com/tradesdontlie/tradingview-mcp.git, run npm install, add it to my MCP config at ~/.claude/.mcp.json, and launch TradingView with the debug port. Then verify the connection with tv_health_check.
+> Use this fork's reviewed `main` and committed lock (`npm ci --ignore-scripts`). Keep an existing registration pointed at its canonical `src/server.js`; restart only the affected MCP client through its owner. Use `tv_launch` with `kill_existing:false`, then `tv_health_check`. Configuration, authentication and restart decisions remain with the operator.
 
 Or follow the manual steps below.
 
@@ -81,37 +80,30 @@ Or follow the manual steps below.
 ### 1. Install
 
 ```bash
-git clone https://github.com/tradesdontlie/tradingview-mcp.git
+git clone https://github.com/naopi1213777/tradingview-mcp.git
 cd tradingview-mcp
-npm install
+npm ci --ignore-scripts
 ```
 
 ### 2. Launch TradingView with CDP
 
 TradingView Desktop must be running with Chrome DevTools Protocol enabled on port 9222.
 
-**Mac:**
-```bash
-./scripts/launch_tv_debug_mac.sh
+Use the MCP tool with explicit non-killing options:
+
+```json
+{"port":9222,"kill_existing":false}
 ```
 
-**Windows:**
-```bash
-scripts\launch_tv_debug.bat
-```
+Or use the same launcher through `node src/cli/index.js launch`. A running
+non-debug instance is a conflict: let its owner close it normally after checking
+unsaved state. A reused debug endpoint is reported as reuse, not a new spawn.
+Check `success` and `cdp_ready`, not just a PID or CLI exit status.
 
-**Linux:**
-```bash
-./scripts/launch_tv_debug_linux.sh
-```
-
-**Or launch manually on any platform:**
-```bash
-/path/to/TradingView --remote-debugging-port=9222
-```
-
-**Or use the MCP tool** (auto-detects your install):
-> "Use tv_launch to start TradingView in debug mode"
+The legacy `scripts/launch_tv_debug*` wrappers still terminate existing app
+processes and do not provide the same guarded behavior. They are not the
+recommended startup path. Manual startup remains available with the installed
+app's `--remote-debugging-port=9222` option; preserve the existing user profile.
 
 ### 3. Add to Claude Code
 
@@ -184,7 +176,7 @@ tv screenshot / discover / ui-state / range / scroll
 
 The `tv stream` commands poll your locally running TradingView Desktop instance at regular intervals via Chrome DevTools Protocol on localhost.
 
-No connection is made to TradingView's servers. All data stays on your machine.
+The bridge reads through local CDP. The page retains its normal network access, and piping or returning output to an AI client can disclose the requested data.
 
 > [!WARNING]
 > Programmatic consumption of TradingView data may conflict with their Terms of Use regardless of the data source. You are solely responsible for ensuring your usage complies.
@@ -215,7 +207,7 @@ Claude reads [`CLAUDE.md`](CLAUDE.md) automatically when working in this project
 | "Draw a level at 24500" | `draw_shape` (horizontal_line) |
 | "Take a screenshot" | `capture_screenshot` |
 
-## Tool Reference (78 MCP tools)
+## Tool Reference
 
 ### Chart Reading
 
@@ -330,7 +322,7 @@ Tools return compact output by default to minimize context usage. For a typical 
 |---------|---------------------|
 | Pine lines | Returns deduplicated price levels only, not every line object |
 | Pine labels | Capped at 50 per study, text+price only |
-| Pine tables | Pre-formatted row strings, no cell metadata |
+| Pine tables | Formatted rows plus indexed cells, including returned blanks |
 | Pine boxes | Deduplicated {high, low} zones only |
 | OHLCV summary mode | Stats + last 5 bars instead of all bars |
 | Indicator inputs | Encrypted/encoded blobs auto-filtered |
@@ -356,7 +348,7 @@ The key flag: `--remote-debugging-port=9222`
 npm test
 ```
 
-29 tests covering: Pine Script static analysis, server-side compilation, and CLI routing.
+`npm test` includes account-facing E2E operations; use it only with a deliberately prepared target. The focused checks and their recorded scope are described in [dependency verification](docs/dependency-verification.md).
 
 ## Architecture
 
@@ -364,10 +356,10 @@ npm test
 Claude Code  ←→  MCP Server (stdio)  ←→  CDP (port 9222)  ←→  TradingView Desktop (Electron)
 ```
 
-- **Transport**: MCP over stdio (78 tools) + CLI (`tv` command, 30 commands with 66 subcommands)
+- **Transport**: MCP over stdio (84 tools observed at the reviewed child head) + CLI (`tv` command)
 - **Connection**: Chrome DevTools Protocol on localhost:9222
 - **Streaming**: Poll-and-diff loop with deduplication, JSONL output to stdout
-- **No dependencies** beyond `@modelcontextprotocol/sdk` and `chrome-remote-interface`
+- **Runtime dependencies**: pinned `@modelcontextprotocol/sdk`, `chrome-remote-interface` and `zod`; transitive closure is in the committed lock. See [dependency verification](docs/dependency-verification.md).
 
 ## Attributions
 
@@ -381,7 +373,7 @@ This tool is an independent MCP server that connects to Claude Code via the stan
 
 This project is provided **for personal, educational, and research purposes only**.
 
-**How this tool works:** This tool uses Chrome DevTools Protocol (CDP), the standard debugging interface built into Chromium-based applications. It does not reverse engineer any proprietary TradingView protocol, connect to TradingView's servers, or bypass any access controls. The debug port must be explicitly enabled by the user via a standard Chromium command-line flag (`--remote-debugging-port=9222`).
+**How this tool works:** This tool uses Chrome DevTools Protocol (CDP), the standard debugging interface built into Chromium-based applications. It uses undocumented page APIs rather than a separate TradingView protocol client and does not bypass access controls. Page operations can cause normal authenticated requests. The debug port must be explicitly enabled by the user via a standard Chromium command-line flag (`--remote-debugging-port=9222`).
 
 By using this software, you acknowledge and agree that:
 
@@ -394,7 +386,7 @@ By using this software, you acknowledge and agree that:
    - Performing automated trading or algorithmic decision-making using extracted data
    - Violating the intellectual property rights of Pine Script indicator authors
    - Connecting to TradingView's servers or infrastructure (all access is via the locally running Desktop app)
-5. The streaming functionality monitors your locally running TradingView Desktop instance only. It does not connect to TradingView's servers or extract data from TradingView's infrastructure.
+5. Streaming reads the locally running app through CDP. The app retains its normal TradingView connection; consumers are responsible for their output destinations.
 6. Market data accessed through this tool remains subject to exchange and data provider licensing terms. **Do not redistribute, store, or commercially exploit any data obtained through this tool.**
 7. This tool accesses internal, undocumented TradingView application interfaces that may change or break at any time without notice.
 
@@ -408,6 +400,9 @@ The MIT license applies to the source code of this project only. It does not gra
 
 
 ### Deliberate targets, launch and data reads
+
+See [current architecture](docs/architecture.md) for implementation details,
+dated application evidence and the pending actual T3 Claude-client check.
 
 The supported runtime is Node **18.14.1 or later**. Install the committed lock
 with `npm ci --ignore-scripts`; package scripts are not needed for this server.
