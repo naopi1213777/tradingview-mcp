@@ -84,10 +84,14 @@ register('pine', {
       },
     }],
     ['open', {
-      description: 'Open a saved Pine Script by name',
+      description: 'Open an exact saved Pine ID/version in an already displayed clean editor',
+      options: {
+        'script-id': { type: 'string', description: 'Exact saved script ID' },
+        version: { type: 'string', description: 'Exact saved version' },
+      },
       handler: (opts, positionals) => {
-        if (!positionals[0]) throw new Error('Script name required. Usage: tv pine open "My Script"');
-        return core.openScript({ name: positionals.join(' ') });
+        if (!positionals[0] && !opts['script-id']) throw new Error('Exact script name or --script-id required');
+        return core.openScript({ name: positionals.length ? positionals.join(' ') : undefined, script_id: opts['script-id'], version: opts.version });
       },
     }],
     ['list', {

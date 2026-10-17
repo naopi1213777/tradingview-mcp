@@ -281,8 +281,21 @@ Read `line.new()`, `label.new()`, `table.new()`, `box.new()` output from any vis
 | `pine_get_source` | Read current script (**warning: can be 200KB+ for complex scripts**) |
 | `pine_new` | Create blank indicator/strategy/library |
 | `pine_open` / `pine_list_scripts` | Open or list saved scripts |
+
 | `pine_analyze` | Offline static analysis (no chart needed) |
 | `pine_check` | Server-side compile check (no chart needed) |
+
+`pine_open` uses the native saved-script version opener. Prefer `script_id`
+and `version` from `pine_list_scripts`; a name must match exactly and uniquely.
+The Pine editor must already display a clean, saved script. Dirty buffers,
+drafts, confirmations, missing native identity and ambiguous editors are refused.
+The operation does not inject source, compile, save or create a new draft.
+It verifies the actual editor ID/version and saved/editor source digests, and
+returns the previous identity/view state for deliberate restoration. A failed
+native operation can have partial effects: inspect the reported state before
+retrying or restoring. It never automatically retries or overwrites a buffer.
+
+CLI: `tv pine open --script-id '<saved-id>' --version '<saved-version>'`.
 
 ### Replay Mode
 

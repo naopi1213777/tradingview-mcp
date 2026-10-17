@@ -47,11 +47,15 @@ export function registerPineTools(server) {
     catch (err) { return jsonResult({ success: false, error: err.message }, true); }
   });
 
-  server.tool('pine_open', 'Open a saved Pine Script by name', {
-    name: z.string().describe('Name of the saved script to open (case-insensitive match)'),
-  }, async ({ name }) => {
-    try { return jsonResult(await core.openScript({ name })); }
-    catch (err) { return jsonResult({ success: false, source: 'internal_api', error: err.message }, true); }
+  server.tool('pine_open', 'Open an exact saved Pine ID/version using the native editor. Requires one already displayed, clean saved editor; refuses drafts, ambiguity and unavailable identity. Does not compile or save.', {
+    name: z.string().optional().describe('Exact unique saved script name (case-insensitive; no substring fallback)'),
+    script_id: z.string().optional().describe('Exact saved script ID from pine_list_scripts (preferred)'),
+    version: z.string().optional().describe('Exact saved version; defaults only to the selected saved-list version'),
+  }, async ({ name, script_id, version }) => {
+    try {
+      const result = await core.openScript({ name, script_id, version });
+      return jsonResult(result, !result.success);
+    } catch (err) { return jsonResult({ success: false, source: 'native_saved_editor', error: err.message }, true); }
   });
 
   server.tool('pine_list_scripts', 'List saved Pine Scripts', {}, async () => {
