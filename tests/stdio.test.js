@@ -13,6 +13,10 @@ test('SDK1 stdio initialization, tool schemas and bounded offline call', async (
     const strategy = tools.find(t => t.name === 'data_get_strategy_results');
     assert.ok(strategy.inputSchema.properties.entity_id);
     assert.ok(strategy.inputSchema.properties.prepare);
+    const savedOpen = tools.find(t => t.name === 'pine_open');
+    assert.ok(savedOpen.inputSchema.properties.script_id);
+    assert.ok(savedOpen.inputSchema.properties.version);
+    assert.equal(savedOpen.inputSchema.required?.includes('name') ?? false, false);
     assert.ok(tools.find(t => t.name === 'ui_evaluate').description.includes('same-account'));
     const result = await client.callTool({ name: 'pine_analyze', arguments: { source: '//@version=6\nindicator("Offline test")\nplot(close)' } });
     assert.equal(result.isError, undefined);
