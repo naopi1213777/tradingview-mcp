@@ -50,13 +50,19 @@ export function requireFinite(value, name) {
   return n;
 }
 
+async function verifyRuntimeTarget(connection, target) {
+  const location = await connection.Runtime.evaluate({ expression: 'location.href', returnByValue: true });
+  if (location.exceptionDetails) throw new Error('Unable to verify CDP target location');
+  selectChartTarget([{ ...target, url: location.result?.value }], target.id);
+  if (location.result.value !== target.url) throw new Error('CDP target navigated; select the intended tab again');
+}
+
 export async function getClient() {
   if (client) {
     // A stale/moved target is an error, never a reason to replay work on another chart.
     const current = selectChartTarget(await listTargets(CDP_HOST, CDP_PORT), targetInfo.id);
     if (current.url !== targetInfo.url) throw new Error('Cached CDP target navigated; select the intended tab again');
-    const location = await client.Runtime.evaluate({ expression: 'location.href', returnByValue: true });
-    selectChartTarget([{ ...current, url: location.result?.value }], current.id);
+    await verifyRuntimeTarget(client, current);
     targetInfo = current;
     return client;
   }
@@ -70,8 +76,7 @@ export async function connect(targetId = selectedTargetId) {
     await next.Runtime.enable();
     await next.Page.enable();
     await next.DOM.enable();
-    const location = await next.Runtime.evaluate({ expression: 'location.href', returnByValue: true });
-    selectChartTarget([{ ...target, url: location.result?.value }], target.id);
+    await verifyRuntimeTarget(next, target);
   } catch (error) {
     await next.close();
     throw error;

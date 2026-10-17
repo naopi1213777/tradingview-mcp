@@ -187,45 +187,69 @@ export async function getIndicator({ entity_id }) {
 // Reading has no preparation effects by default. Explicit preparation selects
 // one exact strategy before touching panel/visibility, and reports those effects.
 async function ensureStrategyTesterReady({ entity_id, prepare = false } = {}, evalIn = evaluate) {
-  const selected = await evalIn(`(function() {
+  const state = { status: 'not-ready', strategy_id: null, preparation_attempted: false,
+    effects: { panel_requested: false, unhidden: false, status: 'not-requested' } };
+  try {
+    const selected = await evalIn(`(function() {
     ${strategyJS(entity_id)}
     var f = findStrategy();
     return f ? { id: f.id, name: f.name } : null;
   })()`);
-  if (!selected) return { status: 'no-strategy', strategy_id: null, effects: { panel_requested: false, unhidden: false } };
-  const effects = prepare ? await evalIn(`(function() {
+    if (!selected) return { ...state, status: 'no-strategy' };
+    state.strategy_id = selected.id;
+    if (prepare) {
+      // A rejected/lost CDP response cannot establish that the page did nothing.
+      state.preparation_attempted = true;
+      state.effects = { panel_requested: null, unhidden: null, status: 'unknown' };
+      state.effects = await evalIn(`(function() {
+    var effects = { panel_requested: false, unhidden: false, status: 'confirmed' };
+    try {
     ${strategyJS(selected.id)}
     var f = findStrategy();
-    var changed = false, panel = false;
+    if (!f) throw new Error('Selected strategy disappeared before preparation');
     var bwb = window.TradingView && window.TradingView.bottomWidgetBar;
-    if (bwb && typeof bwb.showWidget === 'function') { bwb.showWidget('backtesting'); panel = true; }
-    var visibilityError = null;
-    try {
+    if (bwb && typeof bwb.showWidget === 'function') {
+      effects.panel_requested = null;
+      bwb.showWidget('backtesting');
+      effects.panel_requested = true;
+    }
       if (f.strat.properties().visible.value() === false) {
+        effects.unhidden = null;
         f.strat.properties().visible.setValue(true);
-        changed = true;
+        effects.unhidden = true;
       }
-    } catch (e) { visibilityError = e.message; }
-    return { panel_requested: panel, unhidden: changed, visibility_error: visibilityError };
-  })()`) : { panel_requested: false, unhidden: false };
-  const deadline = Date.now() + (prepare ? 6000 : 0);
-  let ready;
-  do {
-    ready = await evalIn(`(function() {
+    } catch (e) { effects.error = e.message; }
+    if (effects.panel_requested === null || effects.unhidden === null) effects.status = 'unknown';
+    return effects;
+  })()`);
+      if (state.effects.error) return { ...state, status: 'error', error: state.effects.error };
+    }
+    const deadline = Date.now() + (prepare ? 6000 : 0);
+    let ready;
+    do {
+      ready = await evalIn(`(function() {
       ${strategyJS(selected.id)}
       var f = findStrategy();
       return !!(f && f.report && f.report.performance);
     })()`);
-    if (ready || !prepare) break;
-    await new Promise(r => setTimeout(r, 500));
-  } while (Date.now() < deadline);
-  return { status: ready ? 'ready' : 'not-ready', strategy_id: selected.id, effects };
+      if (ready || !prepare) break;
+      await new Promise(r => setTimeout(r, 500));
+    } while (Date.now() < deadline);
+    return { ...state, status: ready ? 'ready' : 'not-ready' };
+  } catch (error) {
+    return { ...state, status: 'error', error: error.message };
+  }
+}
+
+function strategyFailure(preparation) {
+  return { success: false, strategy_id: preparation.strategy_id, preparation,
+    error: preparation.error || 'No strategy on chart' };
 }
 
 export async function getStrategyResults({ entity_id, prepare = false, _deps } = {}) {
   const evalIn = _deps?.evaluate || evaluate;
   const ready = await ensureStrategyTesterReady({ entity_id, prepare }, evalIn);
-  if (ready.status === 'no-strategy') return { success: false, error: 'No strategy on chart', preparation: ready };
+  if (ready.status === 'no-strategy' || ready.status === 'error') return strategyFailure(ready);
   const results = await evalIn(`
     (function() {
       ${strategyJS(ready.strategy_id)}
@@ -264,7 +288,7 @@ export async function getStrategyResults({ entity_id, prepare = false, _deps } =
         return {metrics: clean, currency: currency, strategy: found.name, source: 'internal_api'};
       } catch(e) { return {metrics: {}, source: 'internal_api', error: e.message}; }
     })()
-  `);
+  `).catch(error => ({ error: error.message }));
   return {
     success: Object.keys(results?.metrics || {}).length > 0,
     metric_count: Object.keys(results?.metrics || {}).length,
@@ -281,7 +305,7 @@ export async function getTrades({ max_trades, entity_id, prepare = false, _deps 
   const limit = Math.min(max_trades ?? 20, MAX_TRADES);
   const evalIn = _deps?.evaluate || evaluate;
   const ready = await ensureStrategyTesterReady({ entity_id, prepare }, evalIn);
-  if (ready.status === 'no-strategy') return { success: false, error: 'No strategy on chart', preparation: ready };
+  if (ready.status === 'no-strategy' || ready.status === 'error') return strategyFailure(ready);
   const trades = await evalIn(`
     (function() {
       ${strategyJS(ready.strategy_id)}
@@ -313,7 +337,7 @@ export async function getTrades({ max_trades, entity_id, prepare = false, _deps 
         return {trades: result, total_orders: total, source: 'internal_api'};
       } catch(e) { return {trades: [], source: 'internal_api', error: e.message}; }
     })()
-  `);
+  `).catch(error => ({ error: error.message }));
   return {
     success: (trades?.trades?.length || 0) > 0,
     trade_count: trades?.trades?.length || 0, total_orders: trades?.total_orders ?? null,
@@ -327,7 +351,7 @@ export async function getTrades({ max_trades, entity_id, prepare = false, _deps 
 export async function getEquity({ entity_id, prepare = false, _deps } = {}) {
   const evalIn = _deps?.evaluate || evaluate;
   const ready = await ensureStrategyTesterReady({ entity_id, prepare }, evalIn);
-  if (ready.status === 'no-strategy') return { success: false, error: 'No strategy on chart', preparation: ready };
+  if (ready.status === 'no-strategy' || ready.status === 'error') return strategyFailure(ready);
   const equity = await evalIn(`
     (function() {
       ${strategyJS(ready.strategy_id)}
@@ -347,7 +371,7 @@ export async function getEquity({ entity_id, prepare = false, _deps } = {}) {
         return {data: [], source: 'internal_api', note: 'Equity curve not available via API; use data_get_strategy_results.'};
       } catch(e) { return {data: [], source: 'internal_api', error: e.message}; }
     })()
-  `);
+  `).catch(error => ({ error: error.message }));
   return {
     success: (equity?.data?.length || 0) > 0,
     data_points: equity?.data?.length || 0, source: equity?.source, data: equity?.data || [],

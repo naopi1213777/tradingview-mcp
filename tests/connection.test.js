@@ -6,13 +6,15 @@ import WebSocket from 'ws';
 import vm from 'node:vm';
 test('cached navigation/disappearance refuses work instead of selecting another chart', async () => {
   let url = 'https://jp.tradingview.com/chart/layout/';
+  let runtimeUrl = url;
   let listed = true;
+  let inputs = 0;
   const expressions = [];
   const server = createServer((req, res) => {
     res.setHeader('Content-Type', 'application/json');
     const port = server.address().port;
     if (req.url === '/json/list') res.end(JSON.stringify(listed ? [{ id: 'chart', type: 'page', url, webSocketDebuggerUrl: `ws://127.0.0.1:${port}/devtools/page/chart` }] : []));
-    else if (req.url === '/json/protocol') res.end(JSON.stringify({ version: { major: '1', minor: '3' }, domains: ['Runtime', 'Page', 'DOM'].map(domain => ({ domain, commands: [{ name: 'enable' }, ...(domain === 'Runtime' ? [{ name: 'evaluate', parameters: [{ name: 'expression', type: 'string' }], returns: [{ name: 'result', type: 'object' }] }] : [])] })) }));
+    else if (req.url === '/json/protocol') res.end(JSON.stringify({ version: { major: '1', minor: '3' }, domains: ['Runtime', 'Page', 'DOM', 'Input'].map(domain => ({ domain, commands: [{ name: 'enable' }, ...(domain === 'Input' ? [{ name: 'dispatchKeyEvent', parameters: [{ name: 'type', type: 'string' }] }] : []), ...(domain === 'Runtime' ? [{ name: 'evaluate', parameters: [{ name: 'expression', type: 'string' }], returns: [{ name: 'result', type: 'object' }] }] : [])] })) }));
     else { res.statusCode = 404; res.end('{}'); }
   });
   const ws = new WebSocket.Server({ server });
@@ -21,9 +23,10 @@ test('cached navigation/disappearance refuses work instead of selecting another 
     let result = {};
     if (call.method === 'Runtime.evaluate') {
       expressions.push(call.params.expression);
-      try { result = { result: { value: vm.runInNewContext(call.params.expression, { location: { href: url }, URL }) } }; }
+      try { result = { result: { value: vm.runInNewContext(call.params.expression, { location: { href: runtimeUrl }, URL }) } }; }
       catch (e) { result = { exceptionDetails: { text: e.message } }; }
     }
+    if (call.method === 'Input.dispatchKeyEvent') inputs++;
     socket.send(JSON.stringify({ id: call.id, result }));
   }));
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
@@ -31,7 +34,16 @@ test('cached navigation/disappearance refuses work instead of selecting another 
   process.env.TV_CDP_PORT = String(server.address().port);
   const connection = await import(`../src/connection.js?offline=${server.address().port}`);
   try {
+    runtimeUrl = 'https://jp.tradingview.com/chart/OTHER/';
+    const directInput = async () => (await connection.getClient()).Input.dispatchKeyEvent({ type: 'keyDown' });
+    await assert.rejects(directInput(), /navigated/); // initial attach, stale list metadata
+    assert.equal(inputs, 0);
+    runtimeUrl = url;
     assert.equal(await connection.evaluate('42'), 42);
+    runtimeUrl = 'https://jp.tradingview.com/chart/OTHER/';
+    await assert.rejects(directInput(), /navigated/); // cached attach, stale list metadata
+    assert.equal(inputs, 0);
+    runtimeUrl = url;
     const before = expressions.length;
     url = 'https://evil.example/';
     await assert.rejects(connection.evaluate('globalThis.mutated = true'), /not an eligible|navigated/);

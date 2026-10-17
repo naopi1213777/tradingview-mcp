@@ -71,7 +71,10 @@ function dataContext(count = 1) {
 }
 test('strategy ambiguity has no effects; explicit preparation affects only selected strategy', async () => {
   const d = dataContext(2);
-  await assert.rejects(getStrategyResults({ _deps: d }), /Multiple strategies/);
+  const ambiguous = await getStrategyResults({ _deps: d });
+  assert.equal(ambiguous.success, false);
+  assert.match(ambiguous.error, /Multiple strategies/);
+  assert.equal(ambiguous.preparation.preparation_attempted, false);
   assert.equal(d.panel(), 0);
   const result = await getStrategyResults({ entity_id: 's1', _deps: d });
   assert.equal(result.strategy_id, 's1'); assert.equal(result.metrics.net_profit, 12.5);

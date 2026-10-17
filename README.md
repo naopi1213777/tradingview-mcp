@@ -436,7 +436,12 @@ Strategy responses use `metrics.net_profit`, `total_trades`,
 `percent_profitable`, `profit_factor` and `max_drawdown`. Select exact `entity_id`
 when multiple strategies exist. Reads make no preparation changes by default;
 `prepare:true` / CLI `--prepare` explicitly opens the tester and may unhide only
-that selected strategy. Results report strategy ID and preparation effects.
+that selected strategy. Results retain the selected ID and preparation effects
+even when a later read fails. Effect booleans are `null` when an attempted call
+has an unknown outcome (`effects.status: "unknown"`); `false` means confirmed
+no effect. Inspect that state before another mutation: no retry or automatic
+rollback is performed. CLI failure JSON can still have exit code 0; check
+`success` and the preparation details.
 Missing metrics/reports are unavailable, never manufactured as zero; missing
 trade totals are `null`. Trade responses return at most 20 recent orders, and an
 unavailable equity curve is reported rather than replaced with buy-and-hold data.
