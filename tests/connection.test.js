@@ -5,7 +5,7 @@ import { createServer } from 'node:http';
 import WebSocket from 'ws';
 import vm from 'node:vm';
 test('cached navigation/disappearance refuses work instead of selecting another chart', async () => {
-  let url = 'https://www.tradingview.com/chart/layout/';
+  let url = 'https://jp.tradingview.com/chart/layout/';
   let listed = true;
   const expressions = [];
   const server = createServer((req, res) => {

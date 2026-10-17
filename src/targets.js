@@ -14,7 +14,7 @@ export function isChartTarget(target) {
   if (target?.type !== 'page' || typeof target.id !== 'string' || !target.id) return false;
   try {
     const u = new URL(target.url);
-    return u.protocol === 'https:' && ['tradingview.com', 'www.tradingview.com'].includes(u.hostname)
+    return u.protocol === 'https:' && ['tradingview.com', 'www.tradingview.com', 'jp.tradingview.com'].includes(u.hostname)
       && !u.username && !u.password && !u.port && /^\/chart\/(?:[^/]+\/?)?$/.test(u.pathname);
   } catch { return false; }
 }
@@ -43,7 +43,7 @@ export function isAppTarget(target, kind) {
   if (target?.type !== 'page' || !target.id || !['window', 'new-tab'].includes(kind)) return false;
   try {
     const u = new URL(target.url);
-    if (u.protocol !== 'file:' || u.host || u.search || u.hash) return false;
+    if (u.protocol !== 'file:' || u.host || u.hash || [...u.searchParams.keys()].some(k => k !== 'rendererInitialData') || u.searchParams.getAll('rendererInitialData').length > 1) return false;
     const p = resolve(fileURLToPath(u));
     return resourceRoots.some(root => p === join(resolve(root), 'app.asar', 'app', kind, 'index.html'))
       && !p.includes(`${sep}..${sep}`);

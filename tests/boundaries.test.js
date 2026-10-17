@@ -8,7 +8,7 @@ import { launch } from '../src/core/health.js';
 import { getStrategyResults, getTrades, getPineLabels, getPineTables } from '../src/core/data.js';
 const chart = (url, id = 'one') => ({ type: 'page', id, url });
 test('parsed target boundary and explicit ambiguity', () => {
-  for (const url of ['https://www.tradingview.com/chart/', 'https://tradingview.com/chart/ABC123/']) assert.ok(isChartTarget(chart(url)));
+  for (const url of ['https://www.tradingview.com/chart/', 'https://tradingview.com/chart/ABC123/', 'https://jp.tradingview.com/chart/fvp8kOI2/']) assert.ok(isChartTarget(chart(url)));
   for (const url of ['https://tradingview.com.evil/chart/', 'https://evil/?tradingview.com/chart/', 'https://tradingview.com@evil/chart/', 'https://user@tradingview.com/chart/', 'http://tradingview.com/chart/', 'https://tradingview.com:444/chart/', 'https://tradingview.com/symbols/', 'file:///tmp/tradingview.com/chart/']) assert.equal(isChartTarget(chart(url)), false, url);
   const targets = [chart('https://tradingview.com/chart/'), chart('https://www.tradingview.com/chart/A/', 'two')];
   assert.throws(() => selectChartTarget(targets), /Multiple/);
@@ -94,4 +94,15 @@ test('missing strategy/drawing data cannot pass as a required data check', async
   assert.equal((await getStrategyResults({ _deps: dataContext(0) })).success, false);
   assert.equal((await getPineLabels({ _deps: { evaluate: async () => [] } })).success, false);
   assert.equal((await getPineTables({ _deps: { evaluate: async () => [] } })).data_available, false);
+});
+
+test('exact Japanese host retains scheme, credentials, path, port and ID boundaries', () => {
+  const valid = chart('https://jp.tradingview.com/chart/saved/', 'jp');
+  assert.equal(selectChartTarget([valid], 'jp').id, 'jp');
+  for (const url of ['http://jp.tradingview.com/chart/', 'https://jp.tradingview.com:444/chart/', 'https://user@jp.tradingview.com/chart/', 'https://jp.tradingview.com/symbols/', 'https://jp.tradingview.com.evil/chart/', 'https://jp.tradingview.com./chart/', 'https://other.tradingview.com/chart/']) assert.equal(isChartTarget(chart(url)), false, url);
+  if (process.platform === 'darwin') {
+    const prefix = 'file:///Applications/TradingView.app/Contents/Resources/app.asar/app/window/index.html';
+    assert.ok(isAppTarget(chart(prefix + '?rendererInitialData=test'), 'window'));
+    assert.equal(isAppTarget(chart(prefix + '?arbitrary=test'), 'window'), false);
+  }
 });
