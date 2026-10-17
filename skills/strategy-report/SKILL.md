@@ -10,7 +10,7 @@ You are generating a detailed performance report for a Pine Script strategy on T
 ## Step 1: Gather Data
 
 Collect all available performance data:
-1. `data_get_strategy_results` — overall metrics (net profit, win rate, profit factor, etc.)
+1. `data_get_strategy_results` — snake_case metrics (`metrics.net_profit`, `percent_profitable`, `profit_factor`, `max_drawdown`, `total_trades`). Select exact `entity_id` when ambiguous. Missing reports are unavailable, not zero; use `prepare:true` only when tester/visibility effects are intended and report those effects.
 2. `data_get_trades` — individual trade list (max 20)
 3. `data_get_equity` — equity curve data points
 4. `chart_get_state` — current symbol, timeframe, and studies on chart

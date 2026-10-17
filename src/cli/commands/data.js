@@ -1,6 +1,12 @@
 import { register } from '../router.js';
 import * as core from '../../core/data.js';
 
+const strategyOptions = {
+  'entity-id': { type: 'string', description: 'Exact strategy entity ID (required if ambiguous)' },
+  prepare: { type: 'boolean', description: 'Explicitly open tester/unhide selected strategy; reports effects' },
+};
+const strategyArgs = opts => ({ entity_id: opts['entity-id'], prepare: opts.prepare });
+
 register('quote', {
   description: 'Get real-time price quote',
   handler: (opts, positionals) => core.getQuote({ symbol: positionals[0] }),
@@ -60,18 +66,21 @@ register('data', {
     }],
     ['strategy', {
       description: 'Get strategy performance metrics',
-      handler: () => core.getStrategyResults(),
+      options: strategyOptions,
+      handler: opts => core.getStrategyResults(strategyArgs(opts)),
     }],
     ['trades', {
       description: 'Get strategy trade list',
       options: {
+        ...strategyOptions,
         max: { type: 'string', short: 'n', description: 'Max trades to return' },
       },
-      handler: (opts) => core.getTrades({ max_trades: opts.max ? Number(opts.max) : undefined }),
+      handler: (opts) => core.getTrades({ ...strategyArgs(opts), max_trades: opts.max ? Number(opts.max) : undefined }),
     }],
     ['equity', {
       description: 'Get strategy equity curve',
-      handler: () => core.getEquity(),
+      options: strategyOptions,
+      handler: opts => core.getEquity(strategyArgs(opts)),
     }],
     ['depth', {
       description: 'Get order book / DOM data',

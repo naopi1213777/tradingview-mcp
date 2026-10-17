@@ -4,6 +4,7 @@
  * They throw on error (callers catch and format).
  */
 import { evaluate, evaluateAsync, getClient } from '../connection.js';
+import { openSavedScript } from './pine-saved.js';
 
 // ── Monaco finder (injected into TV page) ──
 const FIND_MONACO = `
@@ -534,58 +535,8 @@ export async function newScript({ type }) {
   return { success: true, type, action: 'new_script_created', template: typeMap[type] };
 }
 
-export async function openScript({ name }) {
-  const editorReady = await ensurePineEditorOpen();
-  if (!editorReady) throw new Error('Could not open Pine Editor.');
-
-  const escapedName = JSON.stringify(name.toLowerCase());
-
-  const result = await evaluateAsync(`
-    (function() {
-      var target = ${escapedName};
-      return fetch('https://pine-facade.tradingview.com/pine-facade/list/?filter=saved', { credentials: 'include' })
-        .then(function(r) { return r.json(); })
-        .then(function(scripts) {
-          if (!Array.isArray(scripts)) return {error: 'pine-facade returned unexpected data'};
-          var match = null;
-          for (var i = 0; i < scripts.length; i++) {
-            var sn = (scripts[i].scriptName || '').toLowerCase();
-            var st = (scripts[i].scriptTitle || '').toLowerCase();
-            if (sn === target || st === target) { match = scripts[i]; break; }
-          }
-          if (!match) {
-            for (var j = 0; j < scripts.length; j++) {
-              var sn2 = (scripts[j].scriptName || '').toLowerCase();
-              var st2 = (scripts[j].scriptTitle || '').toLowerCase();
-              if (sn2.indexOf(target) !== -1 || st2.indexOf(target) !== -1) { match = scripts[j]; break; }
-            }
-          }
-          if (!match) return {error: 'Script "' + target + '" not found. Use pine_list_scripts to see available scripts.'};
-
-          var id = match.scriptIdPart;
-          var ver = match.version || 1;
-          return fetch('https://pine-facade.tradingview.com/pine-facade/get/' + id + '/' + ver, { credentials: 'include' })
-            .then(function(r2) { return r2.json(); })
-            .then(function(data) {
-              var source = data.source || '';
-              if (!source) return {error: 'Script source is empty', name: match.scriptName || match.scriptTitle};
-              var m = ${FIND_MONACO};
-              if (m) {
-                m.editor.setValue(source);
-                return {success: true, name: match.scriptName || match.scriptTitle, id: id, lines: source.split('\\n').length};
-              }
-              return {error: 'Monaco editor not found to inject source', name: match.scriptName || match.scriptTitle};
-            });
-        })
-        .catch(function(e) { return {error: e.message}; });
-    })()
-  `);
-
-  if (result?.error) {
-    throw new Error(result.error);
-  }
-
-  return { success: true, name: result.name, script_id: result.id, lines: result.lines, source: 'internal_api', opened: true };
+export async function openScript(options = {}) {
+  return openSavedScript(options);
 }
 
 export async function listScripts() {

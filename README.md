@@ -281,8 +281,21 @@ Read `line.new()`, `label.new()`, `table.new()`, `box.new()` output from any vis
 | `pine_get_source` | Read current script (**warning: can be 200KB+ for complex scripts**) |
 | `pine_new` | Create blank indicator/strategy/library |
 | `pine_open` / `pine_list_scripts` | Open or list saved scripts |
+
 | `pine_analyze` | Offline static analysis (no chart needed) |
 | `pine_check` | Server-side compile check (no chart needed) |
+
+`pine_open` uses the native saved-script version opener. Prefer `script_id`
+and `version` from `pine_list_scripts`; a name must match exactly and uniquely.
+The Pine editor must already display a clean, saved script. Dirty buffers,
+drafts, confirmations, missing native identity and ambiguous editors are refused.
+The operation does not inject source, compile, save or create a new draft.
+It verifies the actual editor ID/version and saved/editor source digests, and
+returns the previous identity/view state for deliberate restoration. A failed
+native operation can have partial effects: inspect the reported state before
+retrying or restoring. It never automatically retries or overwrites a buffer.
+
+CLI: `tv pine open --script-id '<saved-id>' --version '<saved-version>'`.
 
 ### Replay Mode
 
@@ -392,3 +405,57 @@ By using this software, you acknowledge and agree that:
 MIT — see [LICENSE](LICENSE) for details.
 
 The MIT license applies to the source code of this project only. It does not grant any rights to TradingView's software, data, trademarks, or intellectual property.
+
+
+### Deliberate targets, launch and data reads
+
+The supported runtime is Node **18.14.1 or later**. Install the committed lock
+with `npm ci --ignore-scripts`; package scripts are not needed for this server.
+The server remains stdio, with the existing local CDP endpoint (127.0.0.1:9222).
+`TV_CDP_HOST`/`CDP_HOST` and `TV_CDP_PORT`/`CDP_PORT` aliases remain supported;
+invalid ports are errors. Endpoint configuration is trusted operator input.
+
+Only eligible HTTPS chart pages on exact `tradingview.com`,
+`www.tradingview.com` or `jp.tradingview.com` are selectable. An ambiguous chart
+list is an error: set `TV_CDP_TARGET_ID` to one exact eligible page ID or use an
+explicit tab switch. IDs do not bypass URL checks. A cached target that navigates
+or disappears is rejected; work is not silently replayed on another chart.
+Desktop shell/landing pages are classified separately by installed resource
+path and capability. Tab switching never hunts through unrelated ordinals;
+when CDP cannot activate the exact tab, activate it manually and retry.
+
+`tv_launch` / `tv launch` defaults to non-killing startup, reuses a verified
+TradingView debug endpoint and reports a running non-debug instance as a conflict.
+A spawned PID without CDP readiness returns `success:false`. The app child alone
+has inherited `ELECTRON_RUN_AS_NODE` removed; the parent environment is unchanged.
+`kill_existing:true` / `tv launch --kill-existing` is an explicit destructive
+restart of existing TradingView instances. Windows Store local-copy fallback
+also requires that explicit restart. Manual app use remains available.
+
+Strategy responses use `metrics.net_profit`, `total_trades`,
+`percent_profitable`, `profit_factor` and `max_drawdown`. Select exact `entity_id`
+when multiple strategies exist. Reads make no preparation changes by default;
+`prepare:true` / CLI `--prepare` explicitly opens the tester and may unhide only
+that selected strategy. Results retain the selected ID and preparation effects
+even when a later read fails. Effect booleans are `null` when an attempted call
+has an unknown outcome (`effects.status: "unknown"`); `false` means confirmed
+no effect. Inspect that state before another mutation: no retry or automatic
+rollback is performed. CLI failure JSON can still have exit code 0; check
+`success` and the preparation details.
+Missing metrics/reports are unavailable, never manufactured as zero; missing
+trade totals are `null`. Trade responses return at most 20 recent orders, and an
+unavailable equity curve is reported rather than replaced with buy-and-hold data.
+
+Labels default to 50 per study; a positive `max_labels` increases that limit.
+Responses distinguish total, eligible and returned counts and truncation. Label
+records are not deduplicated; use verbose IDs/coordinates when identity matters.
+Prices retain existing eight-decimal rounding, which is not a tick-size guarantee.
+Tables retain formatted rows and also expose table IDs and indexed cells,
+including returned blank strings. Unreturned positions, decoration and timeframe
+identity are not inferred from text.
+
+`ui_evaluate` executes arbitrary same-account JavaScript. It can access
+credential-bearing page state, make network requests and change saved state;
+it is a trusted-caller escape hatch, not a sandbox or read-only interface.
+Other chart, Pine, alert, replay and layout tools also have state effects.
+Use the specific required operation and preserve user buffers and saved state.
